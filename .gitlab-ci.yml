@@ -1,0 +1,213 @@
+image: python:3.10-slim
+
+stages:
+  - test
+  - publish
+  - verify
+
+quality:
+  stage: test
+  tags:
+    - dicehub-com-docker
+  variables:
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+    PYINSTALLER_CONFIG_DIR: "$CI_PROJECT_DIR/build/pyinstaller/cache"
+  cache:
+    paths:
+      - .cache/pip/
+  before_script:
+    - python -m pip install --requirement requirements/dev.txt
+    - python -m pip install --no-build-isolation --no-deps --editable .
+    - python -m pip check
+  script:
+    - ruff format --check .
+    - ruff check .
+    - mypy dicehub tests examples scripts
+    - python scripts/check_docs.py
+    - pytest
+    - python -m build --no-isolation
+    - python -m readme_renderer README.md -o /tmp/dicehub-python-readme.html
+    - python -m twine check dist/*.whl dist/*.tar.gz
+    - python scripts/check_dist.py
+    - python -m venv /tmp/dicehub-wheel-smoke
+    - /tmp/dicehub-wheel-smoke/bin/pip install dist/*.whl
+    - /tmp/dicehub-wheel-smoke/bin/python -I tests/smoke/installed_package.py VERSION
+    - apt-get update
+    - apt-get install --yes --no-install-recommends binutils
+    - >-
+      python -m PyInstaller --clean --noconfirm --onefile
+      --copy-metadata dicehub-python --name dicehub
+      --distpath build/pyinstaller/dist
+      --workpath build/pyinstaller/work
+      --specpath build/pyinstaller
+      dicehub/__main__.py
+    - python tests/smoke/executable.py build/pyinstaller/dist/dicehub
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - dist/
+
+compatibility:
+  stage: test
+  image: python:${PYTHON_VERSION}-slim
+  tags:
+    - dicehub-com-docker
+  parallel:
+    matrix:
+      - PYTHON_VERSION: ["3.11", "3.12", "3.13", "3.14"]
+  variables:
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    DICEHUB_LIVE_TEST: "0"
+  before_script:
+    - python -m pip install --requirement requirements/dev.txt
+    - python -m pip install --no-build-isolation --no-deps --editable .
+    - python -m pip check
+  script:
+    - pytest
+    - python -m build --no-isolation
+    - python -m twine check dist/*.whl dist/*.tar.gz
+    - python scripts/check_dist.py
+    - python -m venv /tmp/dicehub-wheel-smoke
+    - /tmp/dicehub-wheel-smoke/bin/pip install --requirement requirements/requirements.txt
+    - /tmp/dicehub-wheel-smoke/bin/pip install --no-deps dist/*.whl
+    - /tmp/dicehub-wheel-smoke/bin/pip check
+    - /tmp/dicehub-wheel-smoke/bin/python -I tests/smoke/installed_package.py VERSION
+
+# Version tags publish normally. The first renamed 0.10.0 package can instead use the reviewed,
+# protected dev commit without moving the existing v0.10.0 tag.
+publish-gitlab:
+  stage: publish
+  interruptible: false
+  resource_group: dicehub-python-gitlab
+  tags:
+    - dicehub-com-docker
+  needs:
+    - job: quality
+      artifacts: true
+    - job: compatibility
+      artifacts: false
+  variables:
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    TWINE_NON_INTERACTIVE: "1"
+    TWINE_PASSWORD: "$CI_JOB_TOKEN"
+    TWINE_USERNAME: gitlab-ci-token
+  before_script:
+    - python -m pip install --constraint requirements/dev.txt twine==6.2.0
+  script:
+    - |
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        RELEASE_TAG="$CI_COMMIT_TAG" python scripts/check_release.py
+      else
+        python scripts/check_dist.py
+      fi
+    - python -m twine check dist/*.whl
+    - >-
+      python -m twine upload --non-interactive
+      --repository-url "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi"
+      dist/*.whl
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/ && $CI_COMMIT_REF_PROTECTED == "true"'
+    - if: '$DICEHUB_GITLAB_PYPI_PUBLISH == "1" && $CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_REF_PROTECTED == "true"'
+      when: manual
+      allow_failure: false
+
+verify-gitlab:
+  stage: verify
+  tags:
+    - dicehub-com-docker
+  needs:
+    - job: quality
+      artifacts: true
+    - job: publish-gitlab
+  variables:
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  before_script:
+    - |
+      umask 077
+      printf 'machine %s\nlogin gitlab-ci-token\npassword %s\n' \
+        "${CI_SERVER_HOST}" "${CI_JOB_TOKEN}" > "${HOME}/.netrc"
+  script:
+    - python -m venv /tmp/dicehub-registry-smoke
+    - /tmp/dicehub-registry-smoke/bin/pip install --requirement requirements/requirements.txt
+    - export PACKAGE_VERSION="$(python -c 'from pathlib import Path; print(Path("VERSION").read_text().strip())')"
+    - mkdir /tmp/dicehub-registry-download
+    - /tmp/dicehub-registry-smoke/bin/pip download --dest /tmp/dicehub-registry-download --no-cache-dir --no-deps --index-url "https://${CI_SERVER_HOST}/api/v4/projects/${CI_PROJECT_ID}/packages/pypi/simple" "dicehub-python==${PACKAGE_VERSION}"
+    - >-
+      /tmp/dicehub-registry-smoke/bin/python -c 'import hashlib; from pathlib import Path;
+      built = next(Path("dist").glob("dicehub_python-*.whl"));
+      downloaded = next(Path("/tmp/dicehub-registry-download").glob("dicehub_python-*.whl"));
+      digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest();
+      assert digest(downloaded) == digest(built), (downloaded, built)'
+    - /tmp/dicehub-registry-smoke/bin/pip install --no-deps /tmp/dicehub-registry-download/dicehub_python-*.whl
+    - /tmp/dicehub-registry-smoke/bin/python -c 'from importlib.metadata import version; from pathlib import Path; expected = Path("VERSION").read_text().strip(); actual = version("dicehub-python"); assert actual == expected, (actual, expected)'
+    - /tmp/dicehub-registry-smoke/bin/dicehub --help
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/ && $CI_COMMIT_REF_PROTECTED == "true"'
+    - if: '$DICEHUB_GITLAB_PYPI_PUBLISH == "1" && $CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_REF_PROTECTED == "true"'
+
+# Public publication is absent unless explicitly requested on protected dev, then remains manual.
+# The first dicehub-python 0.10.0 upload uses the reviewed pipeline commit, not the old v0.10.0 tag.
+publish-pypi:
+  stage: publish
+  interruptible: false
+  resource_group: dicehub-python-pypi
+  environment:
+    name: pypi
+  tags:
+    - dicehub-com-docker
+  needs:
+    - job: quality
+      artifacts: true
+    - job: compatibility
+      artifacts: false
+  variables:
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    TWINE_NON_INTERACTIVE: "1"
+    TWINE_USERNAME: __token__
+    TWINE_PASSWORD: "$PYPI_API_TOKEN"
+  before_script:
+    - python -m pip install --constraint requirements/dev.txt twine==6.2.0
+  script:
+    - python scripts/check_dist.py
+    - python -m twine check dist/*.whl
+    - python -m twine upload --non-interactive --repository-url https://upload.pypi.org/legacy/ dist/*.whl
+  rules:
+    - if: '$DICEHUB_PYPI_PUBLISH == "1" && $CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_REF_PROTECTED == "true"'
+      when: manual
+      allow_failure: false
+
+verify-pypi:
+  stage: verify
+  tags:
+    - dicehub-com-docker
+  needs:
+    - job: quality
+      artifacts: true
+    - job: publish-pypi
+      artifacts: false
+  variables:
+    PIP_DISABLE_PIP_VERSION_CHECK: "1"
+    PIP_CONFIG_FILE: /dev/null
+    PIP_INDEX_URL: https://pypi.org/simple
+    PIP_EXTRA_INDEX_URL: ""
+  script:
+    - python -m venv /tmp/dicehub-pypi-smoke
+    - /tmp/dicehub-pypi-smoke/bin/pip install --requirement requirements/requirements.txt
+    - export PACKAGE_VERSION="$(python -c 'from pathlib import Path; print(Path("VERSION").read_text().strip())')"
+    - mkdir /tmp/dicehub-pypi-download
+    - >-
+      /tmp/dicehub-pypi-smoke/bin/pip download --dest /tmp/dicehub-pypi-download
+      --no-cache-dir --no-deps --only-binary=:all: --index-url https://pypi.org/simple
+      "dicehub-python==${PACKAGE_VERSION}"
+    - >-
+      /tmp/dicehub-pypi-smoke/bin/python -c 'import hashlib; from pathlib import Path;
+      built = next(Path("dist").glob("dicehub_python-*.whl"));
+      downloaded = next(Path("/tmp/dicehub-pypi-download").glob("dicehub_python-*.whl"));
+      digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest();
+      assert digest(downloaded) == digest(built), (downloaded, built)'
+    - /tmp/dicehub-pypi-smoke/bin/pip install --no-deps /tmp/dicehub-pypi-download/dicehub_python-*.whl
+    - /tmp/dicehub-pypi-smoke/bin/pip check
+    - /tmp/dicehub-pypi-smoke/bin/python -I tests/smoke/installed_package.py VERSION
+  rules:
+    - if: '$DICEHUB_PYPI_PUBLISH == "1" && $CI_COMMIT_BRANCH == "dev" && $CI_COMMIT_REF_PROTECTED == "true"'
