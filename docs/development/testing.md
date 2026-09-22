@@ -107,6 +107,14 @@ download succeeds. It requires `DICEHUB_LIVE_TEST=1`,
 Set `DICEHUB_URL` only when the test must target a non-hosted deployment. The standard suite skips
 the paid run.
 
+The Wildkatze Case Run example uses a user-supplied prepared case. Its focused tests cover the
+workflow, template version validation, machine selection, privacy, unknown outcomes, and result
+handling. `requirements/dev.txt` includes its YAML reader and type stubs; standalone example users
+install `requirements/examples.txt`. Regenerate that file from `requirements/examples.in` with
+`uv pip compile --universal --python-version 3.10` when its input changes. A live test needs a small
+working case, an available runner, an explicit machine and cost approval, and exact cleanup. No
+Wildkatze compute is started by the standard suite.
+
 Root-package warning: an installed-wheel smoke test must use isolated Python and assert that the
 imported `dicehub.__file__` belongs to the temporary environment. Otherwise the checkout can shadow
 a broken wheel.

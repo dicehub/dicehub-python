@@ -81,6 +81,8 @@ the
 [controlled cube workflow](https://github.com/dicehub/dicehub-python/blob/dev/docs/guides/controlled-cube-workflow.md),
 the
 [OpenFOAM 14 Case Run example](https://github.com/dicehub/dicehub-python/blob/dev/docs/guides/openfoam-case-run.md),
+the
+[Wildkatze Case Run example](https://github.com/dicehub/dicehub-python/blob/dev/docs/guides/wildkatze-case-run.md),
 or the
 [car mesh workflow](https://github.com/dicehub/dicehub-python/blob/dev/examples/car_mesh/README.md).
 

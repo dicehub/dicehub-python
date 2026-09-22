@@ -23,6 +23,7 @@ CLI for automation.
 - [Managed API-key lifecycle example](../examples/manage_api_keys.py)
 - [Controlled cube end-to-end example](guides/controlled-cube-workflow.md)
 - [OpenFOAM 14 Case Run example](guides/openfoam-case-run.md)
+- [Wildkatze Case Run example](guides/wildkatze-case-run.md)
 - [Car mesh example](../examples/car_mesh/README.md)
 - [Templates](templates.md)
 - [Apps](apps.md)

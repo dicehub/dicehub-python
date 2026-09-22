@@ -134,6 +134,8 @@ pywin32-ctypes==0.2.3 ; sys_platform == 'win32'
     # via
     #   keyring
     #   pyinstaller
+pyyaml==6.0.3
+    # via -r requirements/examples.in
 readme-renderer==45.0
     # via
     #   -r requirements/dev.in
@@ -170,6 +172,8 @@ twine==6.2.0
     # via -r requirements/dev.in
 typer==0.27.0
     # via -r requirements/requirements.in
+types-pyyaml==6.0.12.20260906
+    # via -r requirements/dev.in
 typing-extensions==4.16.0
     # via
     #   anyio
