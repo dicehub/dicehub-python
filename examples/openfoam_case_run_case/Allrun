@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+
+case_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cd "$case_dir"
+
+blockMesh
+foamRun

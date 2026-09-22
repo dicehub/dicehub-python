@@ -22,6 +22,7 @@ CLI for automation.
 - [Async authentication check example](../examples/async_auth_status.py)
 - [Managed API-key lifecycle example](../examples/manage_api_keys.py)
 - [Controlled cube end-to-end example](guides/controlled-cube-workflow.md)
+- [OpenFOAM 14 Case Run example](guides/openfoam-case-run.md)
 - [Car mesh example](../examples/car_mesh/README.md)
 - [Templates](templates.md)
 - [Apps](apps.md)
