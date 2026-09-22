@@ -99,6 +99,14 @@ resolves the stable snappyHexMesh template route itself. See the
 [controlled cube guide](../guides/controlled-cube-workflow.md) before enabling it; the standard
 suite skips it.
 
+The OpenFOAM Case Run lifecycle creates one private app in an existing project, uploads the bundled
+case, starts one potentially charged run, downloads its result ZIP, and deletes the app after the
+download succeeds. It requires `DICEHUB_LIVE_TEST=1`,
+`DICEHUB_LIVE_OPENFOAM_CASE_RUN_TEST=1`, and the explicit project and machine values from the
+[OpenFOAM Case Run guide](../guides/openfoam-case-run.md). Failure cleanup also requires `STOP_RUN`.
+Set `DICEHUB_URL` only when the test must target a non-hosted deployment. The standard suite skips
+the paid run.
+
 Root-package warning: an installed-wheel smoke test must use isolated Python and assert that the
 imported `dicehub.__file__` belongs to the temporary environment. Otherwise the checkout can shadow
 a broken wheel.
