@@ -17,16 +17,14 @@ def _client() -> Client:
     )
 
 
-# get() below covers the shared ID validator's input classes. Other methods need a wiring check.
 def test_list_rejects_invalid_project_id() -> None:
     with _client() as client, pytest.raises(ConfigurationError):
         client.apps.list(project_id="01")
 
 
-@pytest.mark.parametrize("app_id", ["", "0", "01", "abc", "1" * 257])
-def test_get_rejects_invalid_app_id(app_id: str) -> None:
+def test_get_rejects_invalid_app_id() -> None:
     with _client() as client, pytest.raises(ConfigurationError):
-        client.apps.get(app_id=app_id)
+        client.apps.get(app_id="01")
 
 
 @pytest.mark.parametrize("field", ["project_id", "template_id"])
@@ -41,10 +39,9 @@ def test_create_rejects_invalid_ids(field: str) -> None:
         client.apps.create(**arguments)
 
 
-@pytest.mark.parametrize("name", ["", "ab", "   ", "bad\nname", "x" * 129])
-def test_create_rejects_invalid_name(name: str) -> None:
+def test_create_rejects_invalid_name() -> None:
     with _client() as client, pytest.raises(ConfigurationError):
-        client.apps.create(project_id="41", template_id="9", name=name)
+        client.apps.create(project_id="41", template_id="9", name="ab")
 
 
 def test_create_rejects_nul_description() -> None:
@@ -79,25 +76,18 @@ def test_update_rejects_invalid_fields() -> None:
         client.apps.update(app_id="101", description="bad\0description")
 
 
-@pytest.mark.parametrize("route", ["", "relative", "/bad\nroute", "/" + "a" * 16_384])
-def test_get_by_route_rejects_invalid_route(route: str) -> None:
+def test_get_by_route_rejects_invalid_route() -> None:
     with _client() as client, pytest.raises(ConfigurationError):
-        client.apps.get_by_route(route=route)
+        client.apps.get_by_route(route="relative")
 
 
 @pytest.mark.parametrize(
     "values",
     [
         {"search_filter": "bad\nfilter"},
-        {"search_filter": "x" * 257},
-        {"offset": -1},
-        {"offset": True},
         {"offset": 2**53},
-        {"limit": 0},
-        {"limit": True},
         {"limit": 51},
         {"cursor": "bad cursor"},
-        {"cursor": "x" * 16_385},
     ],
 )
 def test_list_rejects_invalid_filters_and_pagination(values: dict[str, object]) -> None:

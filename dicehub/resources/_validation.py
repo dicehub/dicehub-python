@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 
+from dicehub._core import validation as _shared
 from dicehub.errors import ConfigurationError, ProtocolError
 
 MAX_STORAGE_BYTES = 2 * 1024 * 1024 * 1024
@@ -9,22 +10,10 @@ MAX_TEXT_BYTES = 2 * 1024 * 1024
 _MAX_ID_LENGTH = 256
 _MAX_PATH_LENGTH = 1024
 _MAX_PATH_SEGMENT_LENGTH = 255
-_MAX_FILTER_LENGTH = 256
-_MAX_CURSOR_LENGTH = 16_384
-_MAX_PAGE_SIZE = 50
-_MAX_SAFE_FLOAT_INTEGER = 2**53 - 1
 
 
 def validated_namespace_id(value: str) -> str:
-    if (
-        not isinstance(value, str)
-        or not value.isascii()
-        or not value.isdigit()
-        or value.startswith("0")
-        or len(value) > _MAX_ID_LENGTH
-    ):
-        raise ConfigurationError("Namespace ID is invalid.")
-    return value
+    return _shared.validated_id(value, "Namespace ID", message="Namespace ID is invalid.")
 
 
 def validated_resource_id(value: str) -> str:
@@ -114,40 +103,19 @@ def validated_text_response(value: str) -> str:
 
 
 def validated_search_filter(value: str | None) -> str | None:
-    if value is not None and (
-        not isinstance(value, str)
-        or len(value) > _MAX_FILTER_LENGTH
-        or any(not character.isprintable() for character in value)
-    ):
-        raise ConfigurationError("Resource search filter is invalid.")
-    return value
+    return _shared.validated_search_filter(value, "Resource")
 
 
 def validated_offset(value: int) -> int:
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, int)
-        or not 0 <= value <= _MAX_SAFE_FLOAT_INTEGER
-    ):
-        raise ConfigurationError("Resource offset must be a non-negative safe integer.")
-    return value
+    return _shared.validated_offset(value, "Resource")
 
 
 def validated_page_size(value: int) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= _MAX_PAGE_SIZE:
-        raise ConfigurationError("Resource page size must be between 1 and 50.")
-    return value
+    return _shared.validated_page_size(value, "Resource")
 
 
 def validated_cursor(value: str | None) -> str | None:
-    if value is not None and (
-        not isinstance(value, str)
-        or not value
-        or len(value) > _MAX_CURSOR_LENGTH
-        or any(not character.isprintable() for character in value)
-    ):
-        raise ConfigurationError("Resource cursor is invalid.")
-    return value
+    return _shared.validated_cursor(value, "Resource", printable=True)
 
 
 def validated_storage_limit(value: int) -> int:

@@ -5,15 +5,10 @@ import math
 import re
 from collections.abc import Sequence
 
+from dicehub._core import validation as _shared
 from dicehub.configs.models import ConfigValueUpdate
 from dicehub.errors import ConfigurationError
 
-_MAX_ID_LENGTH = 256
-_MAX_FILTER_LENGTH = 256
-_MAX_CURSOR_LENGTH = 16_384
-_MAX_PAGE_SIZE = 50
-_MAX_SAFE_FLOAT_INTEGER = 2**53 - 1
-_MAX_NAME_LENGTH = 128
 _MAX_CONTENT_PATH_LENGTH = 1024
 _MAX_CONTENT_SEGMENT_LENGTH = 255
 _MAX_YAML_VALUE_PATH_BYTES = 1024
@@ -24,36 +19,15 @@ _GEOMETRY_FILENAME = re.compile(r"[A-Za-z_][A-Za-z0-9_.]*\.stl")
 
 
 def validated_id(value: str, label: str) -> str:
-    if (
-        not isinstance(value, str)
-        or not value.isascii()
-        or not value.isdigit()
-        or value.startswith("0")
-        or len(value) > _MAX_ID_LENGTH
-    ):
-        raise ConfigurationError(f"{label.capitalize()} is invalid.")
-    return value
+    return _shared.validated_id(value, label)
 
 
 def validated_name(value: str | None) -> str | None:
-    if value is None:
-        return None
-    if (
-        not isinstance(value, str)
-        or not 1 <= len(value) <= _MAX_NAME_LENGTH
-        or not value.strip()
-        or any(not character.isprintable() for character in value)
-    ):
-        raise ConfigurationError(
-            f"Config name must be 1 to {_MAX_NAME_LENGTH} printable characters."
-        )
-    return value
+    return None if value is None else _shared.validated_name(value, "Config", min_length=1)
 
 
 def validated_description(value: str | None) -> str | None:
-    if value is not None and (not isinstance(value, str) or "\0" in value):
-        raise ConfigurationError("Config description is invalid.")
-    return value
+    return _shared.validated_description(value, "Config")
 
 
 def validated_content_path(value: str, *, allow_empty: bool = False) -> str:
@@ -198,40 +172,16 @@ def validated_file_limit(value: int) -> int:
 
 
 def validated_search_filter(value: str | None) -> str | None:
-    if value is None:
-        return None
-    if (
-        not isinstance(value, str)
-        or len(value) > _MAX_FILTER_LENGTH
-        or any(not character.isprintable() for character in value)
-    ):
-        raise ConfigurationError("Config search filter is invalid.")
-    return value
+    return _shared.validated_search_filter(value, "Config")
 
 
 def validated_page_size(value: int) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= _MAX_PAGE_SIZE:
-        raise ConfigurationError(f"Config page size must be between 1 and {_MAX_PAGE_SIZE}.")
-    return value
+    return _shared.validated_page_size(value, "Config")
 
 
 def validated_offset(value: int) -> int:
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, int)
-        or not 0 <= value <= _MAX_SAFE_FLOAT_INTEGER
-    ):
-        raise ConfigurationError("Config offset must be a non-negative safe integer.")
-    return value
+    return _shared.validated_offset(value, "Config")
 
 
 def validated_cursor(value: str | None) -> str | None:
-    if value is None:
-        return None
-    if (
-        not isinstance(value, str)
-        or len(value) > _MAX_CURSOR_LENGTH
-        or any(not 0x21 <= ord(character) <= 0x7E for character in value)
-    ):
-        raise ConfigurationError("Config cursor is invalid.")
-    return value
+    return _shared.validated_cursor(value, "Config")

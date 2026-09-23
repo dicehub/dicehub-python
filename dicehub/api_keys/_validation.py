@@ -4,20 +4,19 @@ from collections.abc import Sequence
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from dicehub._core import validation as _shared
 from dicehub.errors import ConfigurationError
 
 if TYPE_CHECKING:
     from dicehub.api_keys.models import NamespacePermission
 
-MAX_ID_LENGTH = 256
+MAX_ID_LENGTH = _shared.MAX_ID_LENGTH
 MAX_NAME_LENGTH = 120
 MAX_SECRET_LENGTH = 4096
 
 
 def validated_id(value: str, label: str) -> str:
-    if not isinstance(value, str) or not is_valid_id(value):
-        raise ConfigurationError(f"{label.capitalize()} is invalid.")
-    return value
+    return _shared.validated_id(value, label)
 
 
 def validated_name(value: str) -> str:
@@ -30,12 +29,7 @@ def validated_name(value: str) -> str:
 
 
 def is_valid_id(value: str) -> bool:
-    return (
-        0 < len(value) <= MAX_ID_LENGTH
-        and value.isascii()
-        and value.isdigit()
-        and not value.startswith("0")
-    )
+    return _shared.is_valid_id(value)
 
 
 def is_valid_name(value: str) -> bool:

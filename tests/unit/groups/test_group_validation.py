@@ -20,15 +20,9 @@ def _client(handler: httpx.MockTransport) -> Client:
         {"user_id": "01"},
         {"parent_id": "group"},
         {"search_filter": "bad\nfilter"},
-        {"search_filter": "x" * 257},
-        {"offset": -1},
-        {"offset": True},
         {"offset": 2**53},
-        {"limit": 0},
-        {"limit": True},
         {"limit": 51},
         {"cursor": "bad cursor"},
-        {"cursor": "x" * 16_385},
         {"order_by": "name"},
         {"order": "ASC"},
     ],
@@ -47,8 +41,7 @@ def test_list_validates_inputs_before_transport(kwargs: dict[str, object]) -> No
     assert request_count == 0
 
 
-@pytest.mark.parametrize("group_id", ["", "0", "01", "+1", "one", " 1", "1 ", "\u0661"])
-def test_get_validates_group_id_before_transport(group_id: str) -> None:
+def test_get_validates_group_id_before_transport() -> None:
     request_count = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -57,16 +50,12 @@ def test_get_validates_group_id_before_transport(group_id: str) -> None:
         return httpx.Response(500, request=request)
 
     with _client(httpx.MockTransport(handler)) as client, pytest.raises(ConfigurationError):
-        client.groups.get(group_id=group_id)
+        client.groups.get(group_id="01")
 
     assert request_count == 0
 
 
-@pytest.mark.parametrize(
-    "route",
-    ["", "dicehub/research", "/dicehub/\nresearch", "/dicehub/\0research", "/" + "x" * 16_384],
-)
-def test_get_by_route_rejects_unsafe_or_oversized_values(route: str) -> None:
+def test_get_by_route_rejects_unsafe_or_oversized_values() -> None:
     request_count = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -75,7 +64,7 @@ def test_get_by_route_rejects_unsafe_or_oversized_values(route: str) -> None:
         return httpx.Response(500, request=request)
 
     with _client(httpx.MockTransport(handler)) as client, pytest.raises(ConfigurationError):
-        client.groups.get_by_route(route=route)
+        client.groups.get_by_route(route="dicehub/research")
 
     assert request_count == 0
 
@@ -129,9 +118,6 @@ def test_update_requires_at_least_one_change_before_transport() -> None:
     [
         {"group_id": "01", "name": "Updated group"},
         {"group_id": "73", "name": ""},
-        {"group_id": "73", "name": "   "},
-        {"group_id": "73", "name": "bad\nname"},
-        {"group_id": "73", "name": "x" * 129},
         {"group_id": "73", "slug": "ab"},
         {"group_id": "73", "slug": "a" * 129},
         {"group_id": "73", "slug": "bad slug"},

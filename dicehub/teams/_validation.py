@@ -1,16 +1,7 @@
 from __future__ import annotations
 
-from dicehub.errors import ConfigurationError
-
-_MAX_ROUTE_LENGTH = 16_384
+from dicehub._core import validation as _shared
 
 
 def validated_route(value: str) -> str:
-    if (
-        not isinstance(value, str)
-        or not value.startswith("/")
-        or len(value) > _MAX_ROUTE_LENGTH
-        or any(not character.isprintable() for character in value)
-    ):
-        raise ConfigurationError("Team route is invalid.")
-    return value
+    return _shared.validated_route(value, "Team")

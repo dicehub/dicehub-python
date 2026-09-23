@@ -35,6 +35,11 @@ services. `_core/graphql.py` and `_core/async_graphql.py` own HTTP lifecycle and
 execution. They share origin, credential, response, and REST validation rules. `_core/status.py`
 maps the common operation status. Domain code never constructs HTTP clients.
 
+`_core/validation.py` owns shared ID, route, name, filter, and pagination checks. Domain validation
+modules keep their existing call signatures and error messages. Runs use the GraphQL `Int` offset
+limit; other list operations use the safe integer limit for GraphQL `Float`. Resource cursors accept
+printable characters but reject an empty value; other cursors accept empty visible ASCII.
+
 Internal imports target leaf modules to prevent facade cycles. Static service registration and
 Python GraphQL constants keep wheel and PyInstaller behavior discoverable.
 
