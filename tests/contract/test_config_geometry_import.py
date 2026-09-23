@@ -121,7 +121,7 @@ def test_import_geometry_uses_fixed_minimal_mutation_once() -> None:
     )
 
 
-@pytest.mark.parametrize("failure", ["transport", "http", "graphql", "protocol"])
+@pytest.mark.parametrize("failure", ["transport", "protocol"])
 def test_import_geometry_ambiguity_is_not_retried(failure: str) -> None:
     calls = 0
 

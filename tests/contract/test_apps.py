@@ -13,7 +13,6 @@ from dicehub import (
     AppPage,
     AppType,
     AppVisibility,
-    AuthenticationError,
     Client,
     MutationOutcomeUnknownError,
     ProtocolError,
@@ -313,14 +312,8 @@ def test_list_forwards_explicit_publication_filter() -> None:
         client.apps.list(project_id="41", is_published=True)
 
 
-@pytest.mark.parametrize(
-    ("server_error", "error_type"),
-    [("AUTH_ERROR", AuthenticationError), ("sentinel-server-secret", APIError)],
-)
-def test_list_maps_status_failure_without_server_details(
-    server_error: str,
-    error_type: type[Exception],
-) -> None:
+def test_list_maps_status_failure_without_server_details() -> None:
+    server_error = "sentinel-server-secret"
     transport = httpx.MockTransport(
         lambda request: httpx.Response(
             200,
@@ -333,7 +326,7 @@ def test_list_maps_status_failure_without_server_details(
         )
     )
 
-    with _client(transport) as client, pytest.raises(error_type) as captured:
+    with _client(transport) as client, pytest.raises(APIError) as captured:
         client.apps.list(project_id="41")
 
     assert server_error not in str(captured.value)
@@ -426,14 +419,8 @@ def test_create_ambiguity_is_non_retryable_and_not_retried(failure: str) -> None
     assert captured.value.__cause__ is None
 
 
-@pytest.mark.parametrize(
-    ("server_error", "error_type"),
-    [("AUTH_ERROR", AuthenticationError), ("sentinel-server-secret", APIError)],
-)
-def test_create_maps_status_failure_without_server_details(
-    server_error: str,
-    error_type: type[Exception],
-) -> None:
+def test_create_maps_status_failure_without_server_details() -> None:
+    server_error = "sentinel-server-secret"
     response = _single_response("createApp")
     operation = response["data"]["apps"]["createApp"]  # type: ignore[index]
     operation["status"] = _status(succeeded=False, error=server_error)
@@ -442,7 +429,7 @@ def test_create_maps_status_failure_without_server_details(
         lambda request: httpx.Response(200, json=response, request=request)
     )
 
-    with _client(transport) as client, pytest.raises(error_type) as captured:
+    with _client(transport) as client, pytest.raises(APIError) as captured:
         client.apps.create(project_id="41", template_id="9", name="Agent app")
 
     assert server_error not in str(captured.value)

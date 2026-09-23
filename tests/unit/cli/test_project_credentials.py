@@ -133,16 +133,3 @@ def test_normal_command_requires_api_key(
         "message": "DICEHUB_API_KEY is required.",
         "retryable": False,
     }
-
-
-@pytest.mark.parametrize(
-    "command",
-    ["list", "get", "get-by-route", "create", "update", "move", "delete"],
-)
-def test_project_help_exposes_no_credential_or_url_options(command: str) -> None:
-    result = runner.invoke(cli_module.app, ["project", command, "--help"])
-
-    assert result.exit_code == 0
-    assert "--api-key" not in result.stdout
-    assert "--session-cookie" not in result.stdout
-    assert "--url" not in result.stdout

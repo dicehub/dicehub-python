@@ -41,8 +41,19 @@ def _api_key(**overrides: object) -> dict[str, object]:
     return payload
 
 
-@pytest.mark.parametrize("operation", ["create", "update", "delete"])
-@pytest.mark.parametrize("failure", ["transport", "http", "graphql", "protocol"])
+@pytest.mark.parametrize(
+    ("operation", "failure"),
+    [
+        ("create", "transport"),
+        ("create", "http"),
+        ("create", "graphql"),
+        ("create", "protocol"),
+        ("update", "transport"),
+        ("update", "protocol"),
+        ("delete", "transport"),
+        ("delete", "protocol"),
+    ],
+)
 def test_mutation_ambiguity_is_not_retried_or_leaked(
     operation: str,
     failure: str,

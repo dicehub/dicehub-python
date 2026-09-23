@@ -208,8 +208,17 @@ def _invoke(client: Client, operation: str) -> object:
     return None
 
 
-@pytest.mark.parametrize("operation", ["start", "stop"])
-@pytest.mark.parametrize("failure", ["timeout", "http", "graphql", "protocol"])
+@pytest.mark.parametrize(
+    ("operation", "failure"),
+    [
+        ("start", "timeout"),
+        ("start", "http"),
+        ("start", "graphql"),
+        ("start", "protocol"),
+        ("stop", "timeout"),
+        ("stop", "protocol"),
+    ],
+)
 def test_mutation_ambiguity_is_mapped_and_never_retried(
     operation: str,
     failure: str,

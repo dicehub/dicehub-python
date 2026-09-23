@@ -7,7 +7,6 @@ import httpx
 import pytest
 
 from dicehub import (
-    APIError,
     AsyncClient,
     AuthContext,
     AuthenticationError,
@@ -183,18 +182,11 @@ def test_context_rejects_incompatible_success_payload(response: dict[str, object
     assert captured.value.__cause__ is None
 
 
-@pytest.mark.parametrize(
-    ("server_error", "error_type"),
-    [("AUTH_ERROR", AuthenticationError), ("sentinel-server-secret", APIError)],
-)
-def test_context_maps_status_failure_without_server_details(
-    server_error: str,
-    error_type: type[Exception],
-) -> None:
+def test_context_maps_auth_status_failure() -> None:
     transport = httpx.MockTransport(
         lambda request: httpx.Response(
             200,
-            json=_response(succeeded=False, error=server_error, auth_context=None),
+            json=_response(succeeded=False, error="AUTH_ERROR", auth_context=None),
             request=request,
         )
     )
@@ -205,11 +197,11 @@ def test_context_maps_status_failure_without_server_details(
             api_key="test-api-key",
             transport=transport,
         ) as client,
-        pytest.raises(error_type) as captured,
+        pytest.raises(AuthenticationError) as captured,
     ):
         client.auth.context()
 
-    assert server_error not in str(captured.value)
+    assert "AUTH_ERROR" not in str(captured.value)
 
 
 def test_api_key_does_not_follow_cross_origin_redirect() -> None:

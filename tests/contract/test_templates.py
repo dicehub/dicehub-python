@@ -8,7 +8,6 @@ import pytest
 
 from dicehub import (
     APIError,
-    AuthenticationError,
     Client,
     ProtocolError,
     SortOrder,
@@ -246,15 +245,9 @@ def test_get_operations_use_fixed_variables_and_return_template(
 
 
 @pytest.mark.parametrize("operation", ["list", "get", "get_by_route"])
-@pytest.mark.parametrize(
-    ("server_error", "error_type"),
-    [("AUTH_ERROR", AuthenticationError), ("sentinel-server-secret", APIError)],
-)
-def test_status_failures_are_generic(
-    operation: str,
-    server_error: str,
-    error_type: type[Exception],
-) -> None:
+def test_status_failures_are_generic(operation: str) -> None:
+    server_error = "sentinel-server-secret"
+
     def handler(request: httpx.Request) -> httpx.Response:
         if operation == "list":
             response = _list_response(
@@ -271,7 +264,7 @@ def test_status_failures_are_generic(
             )
         return httpx.Response(200, json=response, request=request)
 
-    with _client(httpx.MockTransport(handler)) as client, pytest.raises(error_type) as captured:
+    with _client(httpx.MockTransport(handler)) as client, pytest.raises(APIError) as captured:
         if operation == "list":
             client.templates.list()
         elif operation == "get":

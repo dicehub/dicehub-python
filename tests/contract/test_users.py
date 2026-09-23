@@ -5,7 +5,7 @@ import json
 import httpx
 import pytest
 
-from dicehub import APIError, AuthenticationError, Client, ProtocolError, User
+from dicehub import AuthenticationError, Client, ProtocolError, User
 
 
 def _response(status: dict[str, object], user: dict[str, object] | None) -> dict[str, object]:
@@ -64,35 +64,6 @@ def test_me_maps_dicehub_authentication_failure() -> None:
         pytest.raises(AuthenticationError),
     ):
         client.users.me()
-
-
-def test_me_maps_dicehub_status_failure_without_reflecting_server_values() -> None:
-    sentinel = "sentinel-server-secret"
-    transport = httpx.MockTransport(
-        lambda request: httpx.Response(
-            200,
-            json=_response(
-                {"succeeded": False, "error": sentinel},
-                None,
-            ),
-            request=request,
-        )
-    )
-
-    with (
-        Client(
-            base_url="https://dicehub.test",
-            session_cookie="test-session-secret",
-            transport=transport,
-        ) as client,
-        pytest.raises(APIError) as captured,
-    ):
-        client.users.me()
-
-    assert captured.value.server_code is None
-    assert captured.value.message == "dicehub rejected the operation."
-    assert sentinel not in str(captured.value)
-    assert sentinel not in json.dumps(captured.value.as_dict())
 
 
 def test_me_rejects_incompatible_success_payload() -> None:

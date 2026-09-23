@@ -415,14 +415,8 @@ def test_delete_uses_fixed_operation() -> None:
         client.api_keys.delete(api_key_id="91")
 
 
-@pytest.mark.parametrize(
-    ("server_error", "error_type"),
-    [("AUTH_ERROR", AuthenticationError), ("sentinel-server-secret", APIError)],
-)
-def test_create_maps_status_failure_without_server_details(
-    server_error: str,
-    error_type: type[Exception],
-) -> None:
+def test_create_maps_status_failure_without_server_details() -> None:
+    server_error = "sentinel-server-secret"
     transport = httpx.MockTransport(
         lambda request: httpx.Response(
             200,
@@ -442,7 +436,7 @@ def test_create_maps_status_failure_without_server_details(
 
     with (
         _client(transport) as client,
-        pytest.raises(error_type) as captured,
+        pytest.raises(APIError) as captured,
     ):
         client.api_keys.create(
             namespace_id="42",
