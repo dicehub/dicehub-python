@@ -371,11 +371,3 @@ def test_route_or_visibility_update_without_yes_refuses_before_client(
         "message": "Group slug or visibility update requires --yes.",
         "retryable": False,
     }
-
-
-@pytest.mark.parametrize("command", ["list", "get", "get-by-route", "update"])
-def test_group_command_help(command: str) -> None:
-    result = runner.invoke(cli_module.app, ["group", command, "--help"])
-
-    assert result.exit_code == 0
-    assert result.stderr == ""

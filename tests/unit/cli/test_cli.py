@@ -5,6 +5,8 @@ from types import TracebackType
 from typing import ClassVar
 
 import pytest
+from typer.core import TyperCommand, TyperGroup, TyperOption
+from typer.main import get_command
 from typer.testing import CliRunner
 
 from dicehub import AuthContext, AuthenticationError, IdentityMode, User
@@ -379,3 +381,33 @@ def test_auth_status_help_exposes_no_credential_or_url_options() -> None:
     assert result.exit_code == 0
     assert "--api-key" not in result.stdout
     assert "--url" not in result.stdout
+
+
+def test_registered_commands_have_no_credential_or_url_options() -> None:
+    command = get_command(cli_module.app)
+    assert isinstance(command, TyperGroup)
+
+    expected_commands = {
+        "app": {"create", "update", "delete", "list", "get", "get-by-route"},
+        "group": {"list", "get", "get-by-route", "update"},
+        "project": {"list", "get", "get-by-route", "create", "update", "move", "delete"},
+        "template": {"list", "get", "get-by-route"},
+    }
+    for group_name, names in expected_commands.items():
+        group = command.commands[group_name]
+        assert isinstance(group, TyperGroup)
+        assert names <= set(group.commands)
+
+    pending: list[TyperCommand | TyperGroup] = [command]
+    forbidden = {"--api-key", "--session-cookie", "--url"}
+    while pending:
+        current = pending.pop()
+        for parameter in current.params:
+            if isinstance(parameter, TyperOption):
+                assert not forbidden.intersection((*parameter.opts, *parameter.secondary_opts)), (
+                    current.name
+                )
+        if isinstance(current, TyperGroup):
+            for child in current.commands.values():
+                assert isinstance(child, (TyperCommand, TyperGroup))
+                pending.append(child)

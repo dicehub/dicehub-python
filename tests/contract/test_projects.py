@@ -7,7 +7,6 @@ import pytest
 
 from dicehub import (
     APIError,
-    AuthenticationError,
     Client,
     ConfigurationError,
     Project,
@@ -194,14 +193,8 @@ def test_list_accepts_routes_longer_than_legacy_ui_assumptions() -> None:
     assert page.projects[0].display_route == route
 
 
-@pytest.mark.parametrize(
-    ("server_error", "error_type"),
-    [("AUTH_ERROR", AuthenticationError), ("sentinel-server-secret", APIError)],
-)
-def test_list_maps_status_failure_without_server_details(
-    server_error: str,
-    error_type: type[Exception],
-) -> None:
+def test_list_maps_status_failure_without_server_details() -> None:
+    server_error = "sentinel-server-secret"
     transport = httpx.MockTransport(
         lambda request: httpx.Response(
             200,
@@ -214,7 +207,7 @@ def test_list_maps_status_failure_without_server_details(
         )
     )
 
-    with _client(transport) as client, pytest.raises(error_type) as captured:
+    with _client(transport) as client, pytest.raises(APIError) as captured:
         client.projects.list()
 
     assert server_error not in str(captured.value)

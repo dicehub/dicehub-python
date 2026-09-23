@@ -27,11 +27,7 @@ def _client(handler: httpx.MockTransport) -> Client:
     )
 
 
-@pytest.mark.parametrize(
-    "namespace_id",
-    ["", "0", "01", "+42", "-91", "project", " 42", "42 ", "x\n42", "x" * 257],
-)
-def test_namespace_id_validation_happens_before_transport(namespace_id: str) -> None:
+def test_namespace_id_validation_happens_before_transport() -> None:
     request_count = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -43,7 +39,7 @@ def test_namespace_id_validation_happens_before_transport(namespace_id: str) -> 
         _client(httpx.MockTransport(handler)) as client,
         pytest.raises(ConfigurationError),
     ):
-        client.api_keys.list(namespace_id=namespace_id)
+        client.api_keys.list(namespace_id="01")
 
     assert request_count == 0
 

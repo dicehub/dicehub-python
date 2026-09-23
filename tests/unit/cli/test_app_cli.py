@@ -459,16 +459,3 @@ def test_text_output_escapes_untrusted_app_fields() -> None:
     assert result.exit_code == 0
     assert result.stdout.count("\n") == 1
     assert "unsafe\\nname" in result.stdout
-
-
-@pytest.mark.parametrize(
-    "command",
-    ["create", "update", "delete", "list", "get", "get-by-route"],
-)
-def test_app_help_exposes_no_credential_or_url_options(command: str) -> None:
-    result = runner.invoke(cli_module.app, ["app", command, "--help"])
-
-    assert result.exit_code == 0
-    assert "--api-key" not in result.stdout
-    assert "--session-cookie" not in result.stdout
-    assert "--url" not in result.stdout

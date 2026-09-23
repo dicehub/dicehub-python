@@ -7,7 +7,7 @@ from dicehub import APIError, MutationOutcomeUnknownError
 from tests.contract.test_apps import _client, _mutation_response, _status
 
 
-@pytest.mark.parametrize("failure", ["transport", "http", "graphql", "protocol"])
+@pytest.mark.parametrize("failure", ["transport", "protocol"])
 def test_update_ambiguity_is_non_retryable_and_not_retried(failure: str) -> None:
     request_count = 0
 
@@ -57,7 +57,7 @@ def test_update_maps_status_failure_without_server_details() -> None:
     assert "sentinel-server-secret" not in str(captured.value)
 
 
-@pytest.mark.parametrize("failure", ["transport", "http", "graphql", "protocol"])
+@pytest.mark.parametrize("failure", ["transport", "protocol"])
 def test_delete_ambiguity_is_non_retryable_and_not_retried(failure: str) -> None:
     request_count = 0
 

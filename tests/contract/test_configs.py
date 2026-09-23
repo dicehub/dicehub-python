@@ -376,7 +376,7 @@ def test_delete_maps_failed_status_without_server_details() -> None:
     assert "sentinel-server-secret" not in str(captured.value)
 
 
-@pytest.mark.parametrize("failure", ["transport", "http", "graphql", "protocol"])
+@pytest.mark.parametrize("failure", ["transport", "protocol"])
 def test_create_ambiguity_is_non_retryable_and_not_retried(failure: str) -> None:
     request_count = 0
 

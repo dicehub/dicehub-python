@@ -7,11 +7,9 @@ from enum import Enum
 from typing import TypeVar
 from uuid import UUID
 
+from dicehub._core import validation as _shared
 from dicehub.errors import ConfigurationError
 
-_MAX_ID_LENGTH = 256
-_MAX_CURSOR_LENGTH = 16_384
-_MAX_PAGE_SIZE = 50
 _MAX_GRAPHQL_INT = 2**31 - 1
 _MACHINE_TYPE_PATTERN = re.compile(r"[A-Za-z][A-Za-z0-9_]{0,127}")
 MAX_RESULT_ARCHIVE_BYTES = 2 * 1024 * 1024 * 1024
@@ -22,19 +20,11 @@ EnumT = TypeVar("EnumT", bound=Enum)
 
 
 def validated_id(value: str, label: str) -> str:
-    if (
-        not isinstance(value, str)
-        or not value.isascii()
-        or not value.isdigit()
-        or value.startswith("0")
-        or len(value) > _MAX_ID_LENGTH
-    ):
-        raise ConfigurationError(f"{label.capitalize()} is invalid.")
-    return value
+    return _shared.validated_id(value, label)
 
 
 def validated_optional_id(value: str | None, label: str) -> str | None:
-    return None if value is None else validated_id(value, label)
+    return _shared.validated_optional_id(value, label)
 
 
 def validated_uuid(value: str, label: str) -> str:
@@ -108,9 +98,7 @@ def validated_optional_positive_count(value: int | None, label: str) -> int | No
 
 
 def validated_enum(value: EnumT, expected_type: type[EnumT], label: str) -> EnumT:
-    if not isinstance(value, expected_type):
-        raise ConfigurationError(f"{label.capitalize()} is invalid.")
-    return value
+    return _shared.validated_enum(value, expected_type, label)
 
 
 def validated_enum_values(
@@ -133,24 +121,12 @@ def validated_enum_values(
 
 
 def validated_page_size(value: int) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= _MAX_PAGE_SIZE:
-        raise ConfigurationError(f"Run page size must be between 1 and {_MAX_PAGE_SIZE}.")
-    return value
+    return _shared.validated_page_size(value, "Run")
 
 
 def validated_offset(value: int) -> int:
-    if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= _MAX_GRAPHQL_INT:
-        raise ConfigurationError("Run offset must be a non-negative GraphQL integer.")
-    return value
+    return _shared.validated_offset(value, "Run", graphql_int=True)
 
 
 def validated_cursor(value: str | None) -> str | None:
-    if value is None:
-        return None
-    if (
-        not isinstance(value, str)
-        or len(value) > _MAX_CURSOR_LENGTH
-        or any(not 0x21 <= ord(character) <= 0x7E for character in value)
-    ):
-        raise ConfigurationError("Run cursor is invalid.")
-    return value
+    return _shared.validated_cursor(value, "Run")

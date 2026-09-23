@@ -7,7 +7,6 @@ import pytest
 
 from dicehub import (
     APIError,
-    AuthenticationError,
     Client,
     Group,
     GroupDetail,
@@ -276,15 +275,9 @@ def test_update_can_clear_description() -> None:
 
 
 @pytest.mark.parametrize("operation", ["list", "get", "get_by_route"])
-@pytest.mark.parametrize(
-    ("server_error", "error_type"),
-    [("AUTH_ERROR", AuthenticationError), ("sentinel-server-secret", APIError)],
-)
-def test_status_failures_are_generic(
-    operation: str,
-    server_error: str,
-    error_type: type[Exception],
-) -> None:
+def test_status_failures_are_generic(operation: str) -> None:
+    server_error = "sentinel-server-secret"
+
     def handler(request: httpx.Request) -> httpx.Response:
         if operation == "list":
             response = _list_response(
@@ -301,7 +294,7 @@ def test_status_failures_are_generic(
             )
         return httpx.Response(200, json=response, request=request)
 
-    with _client(httpx.MockTransport(handler)) as client, pytest.raises(error_type) as captured:
+    with _client(httpx.MockTransport(handler)) as client, pytest.raises(APIError) as captured:
         if operation == "list":
             client.groups.list()
         elif operation == "get":
@@ -354,14 +347,8 @@ def test_success_without_group_fails_closed(operation: str) -> None:
             client.groups.get_by_route(route="/dicehub/missing")
 
 
-@pytest.mark.parametrize(
-    ("server_error", "error_type"),
-    [("AUTH_ERROR", AuthenticationError), ("sentinel-server-secret", APIError)],
-)
-def test_update_status_failures_are_generic(
-    server_error: str,
-    error_type: type[Exception],
-) -> None:
+def test_update_status_failures_are_generic() -> None:
+    server_error = "sentinel-server-secret"
     transport = httpx.MockTransport(
         lambda request: httpx.Response(
             200,
@@ -372,7 +359,7 @@ def test_update_status_failures_are_generic(
         )
     )
 
-    with _client(transport) as client, pytest.raises(error_type) as captured:
+    with _client(transport) as client, pytest.raises(APIError) as captured:
         client.groups.update(group_id="73", name="Updated group")
 
     assert server_error not in str(captured.value)

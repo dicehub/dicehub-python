@@ -58,6 +58,16 @@ owns package isolation, installed version, typing marker, public domain imports,
 Its command table replaces repeated wheel `--help` calls in CI. Frozen executable checks remain
 separate because bundling can fail independently of wheel installation.
 
+One unit test checks registered options across the complete CLI command tree for credential and URL
+flags. Representative group and command `--help` tests check rendering. Keep argument rejection and
+credential redaction tests for commands that handle them.
+
+The shared status mapper has focused tests for success, missing errors, authentication errors, and
+redaction. Contract tests keep one failed-status case for each endpoint. For mutations, test all
+transport and response failure types on one operation per service helper, then keep transport and
+malformed-response cases on the other operations. Every mutation case must still check that the
+request was sent once and that the error exposes no server details.
+
 `scripts/check_docs.py` owns relative file-link validation. Source-text searches for forbidden
 function names do not prove runtime safety and are not a substitute for behavior tests.
 

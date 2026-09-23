@@ -262,8 +262,19 @@ def test_delete_uses_exact_resource_id_without_follow_up_read() -> None:
     assert len(requests) == 1
 
 
-@pytest.mark.parametrize("method", ["create_text", "set_text", "delete"])
-@pytest.mark.parametrize("failure", ["transport", "http", "graphql", "protocol"])
+@pytest.mark.parametrize(
+    ("method", "failure"),
+    [
+        ("create_text", "transport"),
+        ("create_text", "http"),
+        ("create_text", "graphql"),
+        ("create_text", "protocol"),
+        ("set_text", "transport"),
+        ("set_text", "protocol"),
+        ("delete", "transport"),
+        ("delete", "protocol"),
+    ],
+)
 def test_mutations_map_ambiguous_failures_without_retry(method: str, failure: str) -> None:
     request_count = 0
 

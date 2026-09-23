@@ -249,11 +249,3 @@ def test_operational_error_uses_stable_json_envelope() -> None:
     assert payload["ok"] is False
     assert payload["error"]["code"] == "API_ERROR"
     assert payload["error"]["retryable"] is False
-
-
-@pytest.mark.parametrize("command", ["list", "get", "get-by-route"])
-def test_template_command_help(command: str) -> None:
-    result = runner.invoke(cli_module.app, ["template", command, "--help"])
-
-    assert result.exit_code == 0
-    assert result.stderr == ""

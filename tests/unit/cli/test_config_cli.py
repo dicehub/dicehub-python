@@ -346,12 +346,3 @@ def test_config_help_exposes_metadata_and_content_operations() -> None:
     assert "update" in result.stdout
     assert "content" in result.stdout
     assert "delete" in result.stdout
-
-
-def test_delete_help_exposes_no_credential_or_url_options() -> None:
-    result = runner.invoke(cli_module.app, ["config", "delete", "--help"])
-
-    assert result.exit_code == 0
-    assert "--api-key" not in result.stdout
-    assert "--session-cookie" not in result.stdout
-    assert "--url" not in result.stdout

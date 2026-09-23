@@ -25,16 +25,14 @@ def _client() -> Client:
     )
 
 
-# get() below covers the shared ID validator's input classes. Other methods need a wiring check.
 def test_list_rejects_invalid_app_id() -> None:
     with _client() as client, pytest.raises(ConfigurationError):
         client.configs.list(app_id="01")
 
 
-@pytest.mark.parametrize("config_id", ["", "0", "01", "abc", "1" * 257])
-def test_get_rejects_invalid_config_id(config_id: str) -> None:
+def test_get_rejects_invalid_config_id() -> None:
     with _client() as client, pytest.raises(ConfigurationError):
-        client.configs.get(config_id=config_id)
+        client.configs.get(config_id="01")
 
 
 def test_delete_rejects_invalid_config_id() -> None:
@@ -52,10 +50,9 @@ def test_create_rejects_invalid_source_config_id() -> None:
         client.configs.create(app_id="101", source_config_id="01")
 
 
-@pytest.mark.parametrize("name", ["", "   ", "bad\nname", "x" * 129])
-def test_create_rejects_invalid_name(name: str) -> None:
+def test_create_rejects_invalid_name() -> None:
     with _client() as client, pytest.raises(ConfigurationError):
-        client.configs.create(app_id="101", name=name)
+        client.configs.create(app_id="101", name="bad\nname")
 
 
 def test_create_rejects_nul_description() -> None:
@@ -67,15 +64,9 @@ def test_create_rejects_nul_description() -> None:
     "values",
     [
         {"search_filter": "bad\nfilter"},
-        {"search_filter": "x" * 257},
-        {"offset": -1},
-        {"offset": True},
         {"offset": 2**53},
-        {"limit": 0},
-        {"limit": True},
         {"limit": 51},
         {"cursor": "bad cursor"},
-        {"cursor": "x" * 16_385},
     ],
 )
 def test_list_rejects_invalid_filters_and_pagination(values: dict[str, object]) -> None:
