@@ -300,7 +300,21 @@ def test_get_uses_fixed_operation_and_preserves_missing_as_none() -> None:
         assert client.api_keys.get(namespace_id="42", api_key_id="91") is None
 
 
-def test_list_permissions_returns_server_order_without_local_expansion() -> None:
+@pytest.mark.parametrize(
+    "expected",
+    [
+        (NamespacePermission.VIEW_RUN_INFO, NamespacePermission.VIEW_PROJECT_INFO),
+        (
+            NamespacePermission.DELETE_RESOURCE,
+            NamespacePermission.VIEW_RESOURCE_INFO,
+            NamespacePermission.WRITE_RESOURCE_CONTENT,
+            NamespacePermission.READ_RESOURCE_CONTENT,
+        ),
+    ],
+)
+def test_list_permissions_returns_server_order_without_local_expansion(
+    expected: tuple[NamespacePermission, ...],
+) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         payload = json.loads(request.content)
         assert payload["operationName"] == "ListApiKeyPermissions"
@@ -312,7 +326,7 @@ def test_list_permissions_returns_server_order_without_local_expansion() -> None
                     "apiKeys": {
                         "listApiKeyPermissions": {
                             "status": _status(),
-                            "permissions": ["VIEW_RUN_INFO", "VIEW_PROJECT_INFO"],
+                            "permissions": [permission.value for permission in expected],
                         }
                     }
                 }
@@ -323,10 +337,7 @@ def test_list_permissions_returns_server_order_without_local_expansion() -> None
     with _client(httpx.MockTransport(handler)) as client:
         permissions = client.api_keys.list_permissions(namespace_id="42")
 
-    assert permissions == (
-        NamespacePermission.VIEW_RUN_INFO,
-        NamespacePermission.VIEW_PROJECT_INFO,
-    )
+    assert permissions == expected
 
 
 def test_update_uses_fixed_operation_and_never_requests_secret() -> None:
