@@ -158,15 +158,27 @@ The CLI keeps both credentials out of command arguments. API-key commands connec
 `https://dicehub.com` by default. Session-based development commands retain their loopback
 default. Set `DICEHUB_URL` for another deployment.
 
-The current managed API-key catalog does not expose grants for generic resource metadata or
-storage transfers. A managed key therefore cannot be given the narrow access needed by these
-commands today. Use a session cookie for current generic storage work. The backend permission
-change requires a server update before generic storage can use narrow managed API-key grants.
+Managed resource access requires deployment support and explicit grants. A session client can use
+`client.api_keys.list_permissions(namespace_id=...)` to check the available grants before creating a
+key. Older deployments can use a session cookie; the SDK never switches credentials after an error.
 
-For app data on the current server, metadata reads and downloads use the legacy `VIEW_APP` check;
+| Operation | Managed-key grant |
+|---|---|
+| `resources.list`, `get`, `get_by_key` | `VIEW_RESOURCE_INFO` |
+| `resources.get_text` | `READ_RESOURCE_CONTENT` |
+| `resources.create_text`, `set_text`, `storage.upload_file` | `WRITE_RESOURCE_CONTENT` |
+| `storage.download_file` | `VIEW_RESOURCE_INFO` and `READ_RESOURCE_CONTENT` |
+| `resources.delete` | `DELETE_RESOURCE` |
+
+These grants apply only to app namespaces inside the key's fixed user, group, or project scope.
+Paths must identify ordinary files or folders under `data/`. Managed keys cannot access `info/`,
+CHANNEL resources, or the `app`, `channels`, `config`, `config_backup`, `run`, and `run_backup` trees.
+They cannot write or delete the data root, or replace a folder through a content write. S3 credential
+issuance remains session-only. Existing keys gain no grants; each capability must be selected.
+
+Session permissions are unchanged. For app data, metadata reads and downloads use `VIEW_APP`;
 uploads and exact-ID deletion use `WRITE_APP_STORAGE`; text reads and replacements use
-`EDIT_APP`. Other namespace types use their existing legacy mappings. These broad checks are the
-reason this feature does not claim managed API-key support yet.
+`EDIT_APP`. Other namespace types use their existing legacy mappings.
 
 Do not assume that a key which can list projects, apps, configurations, or runs can access generic
 storage. Listing metadata does not imply reading content, uploading, replacing, or deleting it.

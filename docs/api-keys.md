@@ -33,6 +33,14 @@ Minimum personal-scope grants for the first workflows are:
 
 Do not grant both read and mutation permissions unless one process needs both operations.
 
+Deployments with managed resource access expose `VIEW_RESOURCE_INFO`, `READ_RESOURCE_CONTENT`,
+`WRITE_RESOURCE_CONTENT`, and `DELETE_RESOURCE`. The SDK recognizes these names in sync and async
+permission catalogs and key metadata. Ask a session client for
+`client.api_keys.list_permissions(namespace_id=...)` before selecting grants. The deployment returns
+the grants available to that issuer and scope; SDK enum members do not enable server features.
+Existing keys gain no permissions. See [Resources and storage](resources.md) for the required grants
+and path limits. Group-scoped keys can use `VIEW_TEAM_INFO` only when the deployment catalog offers it.
+
 ## Manage keys through the SDK
 
 The SDK exposes managed keys through `client.api_keys`. The following fragment assumes `client` is

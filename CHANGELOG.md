@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.10.1 - 2026-10-23
+
+- Recognize the four opt-in resource permission names in sync and async API-key catalogs and
+  metadata. Generic resource access still requires deployment support and explicit grants.
+
 ## dicehub-python 0.10.0 public distribution - 2026-09-20
 
 - Redact unknown REST error codes from SDK exceptions and CLI JSON for sync and async file transfers.
