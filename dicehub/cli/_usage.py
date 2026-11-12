@@ -153,7 +153,8 @@ def _declaration(command: Command, name: str | None) -> tuple[Any, ParameterInfo
         signature = inspect.signature(function)
     except (NameError, TypeError, ValueError):
         return None, None
-    kind = hints.get(name)
+    # Python 3.10 wraps an Annotated hint with a None default in Optional; unwrap it first.
+    kind = _without_none(hints.get(name))
     info: ParameterInfo | None = None
     if get_origin(kind) is Annotated:
         kind, *extras = get_args(kind)
@@ -161,10 +162,14 @@ def _declaration(command: Command, name: str | None) -> tuple[Any, ParameterInfo
     declared = signature.parameters.get(name)
     if info is None and declared is not None and isinstance(declared.default, ParameterInfo):
         info = declared.default
-    if get_origin(kind) in (Union, UnionType):
-        members = [member for member in get_args(kind) if member is not type(None)]
-        kind = members[0] if len(members) == 1 else None
-    return kind, info
+    return _without_none(kind), info
+
+
+def _without_none(kind: Any) -> Any:
+    if get_origin(kind) not in (Union, UnionType):
+        return kind
+    members = [member for member in get_args(kind) if member is not type(None)]
+    return members[0] if len(members) == 1 else None
 
 
 def _expected(param: Parameter, command: Command) -> str:
