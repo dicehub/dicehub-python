@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from contextlib import ExitStack
+from typing import Any
 
 import typer
 from typer._click.core import Command, Context
+from typer._click.exceptions import UsageError
 from typer.core import TyperGroup
 
 from dicehub._core.defaults import DEFAULT_BASE_URL, DEFAULT_SESSION_BASE_URL
 from dicehub.cli._examples import EXAMPLES
+from dicehub.cli._usage import UsageCommand, unknown_command, usage_errors, usage_output
 
 _ENVIRONMENT = (
     "\b\nEnvironment:\n"
@@ -30,13 +33,25 @@ class HelpGroup(TyperGroup):
     ) -> tuple[str | None, Command | None, list[str]]:
         if args and args[0] == "ls" and "list" in self.commands:
             args = ["list", *args[1:]]
-        return super().resolve_command(ctx, args)
+        try:
+            return super().resolve_command(ctx, args)
+        except UsageError as error:
+            if type(error) is not UsageError:
+                raise
+        raise unknown_command(ctx, args[0])
 
+    @usage_errors
     def parse_args(self, ctx: Context, args: list[str]) -> list[str]:
+        if ctx.parent is None and "dicehub.usage_output" not in ctx.meta:
+            ctx.meta["dicehub.usage_output"] = usage_output(self, args)
         if ctx.parent is None and args[:1] == ["help"] and not ctx.resilient_parsing:
             self._show_help_path(ctx, args[1:])
             ctx.exit()
         return super().parse_args(ctx, args)
+
+    @usage_errors
+    def invoke(self, ctx: Context) -> Any:
+        return super().invoke(ctx)
 
     @staticmethod
     def _show_help_path(ctx: Context, path: list[str]) -> None:
@@ -44,7 +59,7 @@ class HelpGroup(TyperGroup):
             for word in path:
                 group = ctx.command
                 if not isinstance(group, TyperGroup) or word.startswith("-"):
-                    ctx.fail(f"No such command {word!r}.")
+                    raise unknown_command(ctx, word)
                 name, command, _ = group.resolve_command(ctx, [word])
                 assert command is not None
                 # Build contexts without parsing required parameters or running callbacks.
@@ -61,6 +76,7 @@ def configure_help(app: typer.Typer, path: tuple[str, ...] = ()) -> None:
     if not path:
         app.info.epilog = f"{_ROOT_HINT}\n\n{_ENVIRONMENT}"
     for command in app.registered_commands:
+        command.cls = UsageCommand
         assert command.name is not None
         examples = EXAMPLES[(*path, command.name)]
         # Click's backspace marker preserves each row instead of wrapping the paragraph.

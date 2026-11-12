@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Make CLI usage errors short, omit input values, and support JSON with code `USAGE_ERROR`.
 - Add CLI group descriptions, command examples, environment help, `help`, `ls`, and `--version`.
 
 ## 0.10.1 - 2026-10-23

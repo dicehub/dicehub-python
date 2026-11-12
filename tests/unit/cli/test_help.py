@@ -247,7 +247,7 @@ def test_ls_without_list_is_a_usage_error(path: tuple[str, ...]) -> None:
     result = runner.invoke(app, [*path, "ls"], prog_name="dicehub")
     assert result.exit_code == 2
     assert result.stdout == ""
-    assert "No such command 'ls'." in result.stderr
+    assert result.stderr.startswith("Error: Unknown command.")
 
 
 @pytest.mark.parametrize("path", tuple(path for path, _ in _GROUPS if path))
@@ -255,7 +255,7 @@ def test_help_is_not_a_nested_command(path: tuple[str, ...]) -> None:
     result = runner.invoke(app, [*path, "help"], prog_name="dicehub")
     assert result.exit_code == 2
     assert result.stdout == ""
-    assert "No such command 'help'." in result.stderr
+    assert result.stderr.startswith("Error: Unknown command.")
 
 
 @pytest.mark.parametrize(
@@ -275,8 +275,8 @@ def test_unknown_help_path_is_a_usage_error(path: tuple[str, ...]) -> None:
     result = runner.invoke(app, ["help", *path], prog_name="dicehub")
     assert result.exit_code == 2
     assert result.stdout == ""
-    assert result.stderr.startswith("Usage: dicehub")
-    assert f"No such command {path[-1]!r}." in result.stderr
+    command_path = " ".join(("dicehub", *path[:-1]))
+    assert result.stderr == (f"Error: Unknown command.\nRun '{command_path} --help' for help.\n")
 
 
 def test_version_is_the_package_version_and_has_only_a_long_flag() -> None:
@@ -301,26 +301,21 @@ def test_version_exits_before_command_execution() -> None:
 
 
 @pytest.mark.parametrize(
-    ("arguments", "usage", "message"),
+    ("arguments", "command_path", "message"),
     [
-        (["project", "help"], "project [OPTIONS] COMMAND [ARGS]...", "No such command 'help'."),
+        (["project", "help"], "project", "Unknown command."),
         (
             ["project", "get"],
-            "project get [OPTIONS] {project_id}",
-            "Missing argument 'project_id'.",
+            "project get",
+            "Missing required argument 1.",
         ),
-        (["project", "list", "--invalid"], "project list [OPTIONS]", "No such option: --invalid"),
+        (["project", "list", "--invalid"], "project list", "Unknown option."),
     ],
 )
-def test_existing_usage_error_text_is_unchanged(
-    arguments: list[str], usage: str, message: str
+def test_usage_errors_use_short_format(
+    arguments: list[str], command_path: str, message: str
 ) -> None:
     result = runner.invoke(app, arguments, prog_name="dicehub")
-    command_path = usage.split(" [OPTIONS]", 1)[0]
     assert result.exit_code == 2
     assert result.stdout == ""
-    assert result.stderr == (
-        f"Usage: dicehub {usage}\n"
-        f"Try 'dicehub {command_path} --help' for help.\n\n"
-        f"Error: {message}\n"
-    )
+    assert result.stderr == (f"Error: {message}\nRun 'dicehub {command_path} --help' for help.\n")
