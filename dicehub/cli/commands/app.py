@@ -22,7 +22,7 @@ app_app = typer.Typer(
     no_args_is_help=True,
     rich_markup_mode=None,
 )
-app_app.add_typer(members_app, name="members")
+app_app.add_typer(members_app, name="members", help="Manage app members.")
 
 _OUTPUT_OPTION = typer.Option("--output", case_sensitive=False, help="Output format.")
 

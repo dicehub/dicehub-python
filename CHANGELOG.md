@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Add CLI group descriptions, command examples, environment help, `help`, `ls`, and `--version`.
+
 ## 0.10.1 - 2026-10-23
 
 - Recognize the four opt-in resource permission names in sync and async API-key catalogs and

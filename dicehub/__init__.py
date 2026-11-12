@@ -1,5 +1,4 @@
-from importlib.metadata import PackageNotFoundError, version
-
+from dicehub._version import __version__
 from dicehub.api_keys import (
     ApiKey,
     ApiKeyStatus,
@@ -106,11 +105,6 @@ from dicehub.templates import (
     TemplateType,
 )
 from dicehub.users import MembershipCandidate, User
-
-try:
-    __version__ = version("dicehub-python")
-except PackageNotFoundError:  # pragma: no cover - source tree without installation
-    __version__ = "0+unknown"
 
 __all__ = [
     "APIError",
