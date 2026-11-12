@@ -2,10 +2,25 @@
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable, Sequence
 from difflib import get_close_matches
+from enum import Enum
 from functools import wraps
-from typing import IO, Any, Concatenate, ParamSpec, TypeVar
+from pathlib import PurePath
+from types import UnionType
+from typing import (
+    IO,
+    Annotated,
+    Any,
+    Concatenate,
+    ParamSpec,
+    TypeVar,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 import typer
 from typer._click.core import Command, Context, Parameter
@@ -18,10 +33,8 @@ from typer._click.exceptions import (
     NoSuchOption,
     UsageError,
 )
-from typer._click.types import BoolParamType, FloatParamType, FloatRange, IntParamType, IntRange
-from typer._types import TyperChoice
 from typer.core import TyperArgument, TyperCommand, TyperGroup, TyperOption
-from typer.models import TyperPath
+from typer.models import ParameterInfo
 
 from dicehub.cli.output import OutputFormat, write_error
 from dicehub.errors import DiceHubError
@@ -126,39 +139,61 @@ def _parameter_label(param: Parameter, ctx: Context) -> str:
     return f"argument {arguments.index(param) + 1}" if param in arguments else "argument"
 
 
-def _expected(param: Parameter) -> str:
-    kind = param.type
-    if isinstance(kind, TyperChoice):
-        choices = [kind.normalize_choice(choice, ctx=None) for choice in kind.choices]
+def _declaration(command: Command, name: str | None) -> tuple[Any, ParameterInfo | None]:
+    """Return the declared Python type and Typer metadata of one callback parameter.
+
+    Typer's internal parameter types differ between releases, so read the command's own
+    declaration instead of Typer or Click type classes.
+    """
+    if command.callback is None or name is None:
+        return None, None
+    function = inspect.unwrap(command.callback)
+    try:
+        hints = get_type_hints(function, include_extras=True)
+        signature = inspect.signature(function)
+    except (NameError, TypeError, ValueError):
+        return None, None
+    kind = hints.get(name)
+    info: ParameterInfo | None = None
+    if get_origin(kind) is Annotated:
+        kind, *extras = get_args(kind)
+        info = next((extra for extra in extras if isinstance(extra, ParameterInfo)), None)
+    declared = signature.parameters.get(name)
+    if info is None and declared is not None and isinstance(declared.default, ParameterInfo):
+        info = declared.default
+    if get_origin(kind) in (Union, UnionType):
+        members = [member for member in get_args(kind) if member is not type(None)]
+        kind = members[0] if len(members) == 1 else None
+    return kind, info
+
+
+def _expected(param: Parameter, command: Command) -> str:
+    kind, info = _declaration(command, param.name)
+    if not isinstance(kind, type):
+        return "a valid value"
+    if issubclass(kind, Enum):
+        choices = [str(member.value) for member in kind]
+        if not getattr(info, "case_sensitive", True):
+            choices = [choice.casefold() for choice in choices]
         return "one of " + "|".join(choices) if len(choices) <= 8 else "a choice listed in help"
-    if isinstance(kind, (IntRange, FloatRange)):
-        number = "an integer" if isinstance(kind, IntRange) else "a number"
-        if (
-            kind.min is not None
-            and kind.max is not None
-            and not kind.min_open
-            and not kind.max_open
-        ):
-            return f"{number} from {kind.min} to {kind.max}"
-        bounds = []
-        if kind.min is not None:
-            bounds.append(f"{'greater than' if kind.min_open else 'at least'} {kind.min}")
-        if kind.max is not None:
-            bounds.append(f"{'less than' if kind.max_open else 'at most'} {kind.max}")
-        return " ".join((number, " and ".join(bounds))).rstrip()
-    if isinstance(kind, IntParamType):
-        return "an integer"
-    if isinstance(kind, FloatParamType):
-        return "a number"
-    if isinstance(kind, BoolParamType):
+    if kind is bool:
         return "true or false"
-    if isinstance(kind, TyperPath):
-        parts = ["an existing" if kind.exists else "a"]
-        if kind.readable:
+    if kind in (int, float):
+        number = "an integer" if kind is int else "a number"
+        low, high = getattr(info, "min", None), getattr(info, "max", None)
+        if low is not None and high is not None:
+            return f"{number} from {low} to {high}"
+        bounds = [f"at least {low}"] if low is not None else []
+        bounds += [f"at most {high}"] if high is not None else []
+        return " ".join((number, *bounds))
+    if issubclass(kind, PurePath):
+        parts = ["an existing" if getattr(info, "exists", False) else "a"]
+        if getattr(info, "readable", True):
             parts.append("readable")
-        if kind.writable:
+        if getattr(info, "writable", False):
             parts.append("writable")
-        parts.append("file" if not kind.dir_okay else "directory" if not kind.file_okay else "path")
+        file_okay, dir_okay = getattr(info, "file_okay", True), getattr(info, "dir_okay", True)
+        parts.append("file" if not dir_okay else "directory" if not file_okay else "path")
         return " ".join(parts)
     return "a valid value"
 
@@ -186,7 +221,7 @@ def _cause(error: UsageError, ctx: Context) -> str:
         if isinstance(error, MissingParameter):
             prefix = "option " if isinstance(param, TyperOption) else ""
             return f"Missing required {prefix}{label}."
-        return f"Invalid value for {label}. Expected {_expected(param)}."
+        return f"Invalid value for {label}. Expected {_expected(param, ctx.command)}."
     if isinstance(error, BadOptionUsage):
         option = options.get(error.option_name)
         if option is None:
@@ -197,7 +232,7 @@ def _cause(error: UsageError, ctx: Context) -> str:
             f"Option {error.option_name!r} requires an argument.",
             f"Option {error.option_name!r} requires {option.nargs} arguments.",
         ):
-            return f"Missing value for {label}. Expected {_expected(option)}."
+            return f"Missing value for {label}. Expected {_expected(option, ctx.command)}."
         if error.message == f"Option {error.option_name!r} does not take a value.":
             return f"Option {label} does not take a value."
         return f"Invalid use of option {label}."

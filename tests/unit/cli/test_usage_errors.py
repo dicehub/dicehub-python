@@ -8,7 +8,7 @@ from typing import Annotated, NoReturn
 import httpx
 import pytest
 import typer
-from typer._click.core import Context
+from typer._click.core import Context, Parameter
 from typer._click.exceptions import (
     BadArgumentUsage,
     BadOptionUsage,
@@ -16,7 +16,7 @@ from typer._click.exceptions import (
     NoSuchOption,
     UsageError,
 )
-from typer.core import TyperCommand, TyperOption
+from typer.core import TyperCommand, TyperGroup
 from typer.testing import CliRunner, Result
 
 from dicehub.cli._help import HelpGroup
@@ -243,6 +243,14 @@ def test_no_args_is_help_is_unchanged(arguments: list[str]) -> None:
     assert result.stderr == help_result.stdout
 
 
+def _foreign_option(ctx: Context) -> Parameter:
+    group = ctx.parent.command if ctx.parent is not None else None
+    assert isinstance(group, TyperGroup)
+    option = next(param for param in group.commands["create"].params if param.name == "name")
+    assert option not in ctx.command.params
+    return option
+
+
 @pytest.mark.parametrize("output", FORMATS)
 @pytest.mark.parametrize(
     ("error_factory", "cause"),
@@ -256,7 +264,8 @@ def test_no_args_is_help_is_unchanged(arguments: list[str]) -> None:
         (lambda ctx: UsageError(CONTROL), "Invalid command usage."),
         (lambda ctx: BadParameter(CONTROL, param_hint=CONTROL), "Invalid value."),
         (
-            lambda ctx: BadParameter(CONTROL, param=TyperOption(param_decls=[OPTION])),
+            # A parameter of another command is not registered on this one.
+            lambda ctx: BadParameter(CONTROL, param=_foreign_option(ctx)),
             "Invalid value.",
         ),
         (
