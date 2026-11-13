@@ -148,6 +148,11 @@ def _assert_error(result: Result, cause: str, path: str, *, json_output: bool) -
         (["project", "ls", OPTION], "Unknown option.", "dicehub project list"),
         (["help", "project", "ls", SENTINEL], "Unknown command.", "dicehub project list"),
         (
+            ["run", "list", SENTINEL, "--type", CONTROL],
+            "Invalid value for '--type'. Expected one of regular|extra|micro|prediction.",
+            "dicehub run list",
+        ),
+        (
             ["project", "delete", SENTINEL, "--yes=" + CONTROL],
             "Option '--yes' does not take a value.",
             "dicehub project delete",
@@ -157,6 +162,20 @@ def _assert_error(result: Result, cause: str, path: str, *, json_output: bool) -
 def test_usage_errors(arguments: list[str], cause: str, path: str, output: list[str]) -> None:
     result = runner.invoke(app, [*arguments, *output], prog_name=SENTINEL)
     _assert_error(result, cause, path, json_output=output in FORMATS[2:])
+
+
+@pytest.mark.parametrize(
+    ("group", "tail", "cause"),
+    [
+        ([], ["--", "--"], "Unknown command."),
+        (["project"], ["--", "--"], "Unknown command."),
+        (["project"], ["--"], "Missing command."),
+    ],
+)
+def test_end_of_options_marker_as_command(group: list[str], tail: list[str], cause: str) -> None:
+    # Groups have no --output option, and tokens after '--' are data, so only text applies.
+    result = runner.invoke(app, [*group, *tail], prog_name=SENTINEL)
+    _assert_error(result, cause, " ".join(("dicehub", *group)), json_output=False)
 
 
 @pytest.mark.parametrize("output", FORMATS)

@@ -33,12 +33,14 @@ class HelpGroup(TyperGroup):
     ) -> tuple[str | None, Command | None, list[str]]:
         if args and args[0] == "ls" and "list" in self.commands:
             args = ["list", *args[1:]]
+        # Typer may consume args before it fails, so keep the word for suggestions.
+        word = args[0] if args else ""
         try:
             return super().resolve_command(ctx, args)
         except UsageError as error:
             if type(error) is not UsageError:
                 raise
-        raise unknown_command(ctx, args[0])
+        raise unknown_command(ctx, word)
 
     @usage_errors
     def parse_args(self, ctx: Context, args: list[str]) -> list[str]:

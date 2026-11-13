@@ -162,7 +162,11 @@ def _declaration(command: Command, name: str | None) -> tuple[Any, ParameterInfo
     declared = signature.parameters.get(name)
     if info is None and declared is not None and isinstance(declared.default, ParameterInfo):
         info = declared.default
-    return _without_none(kind), info
+    kind = _without_none(kind)
+    # A repeatable option accepts the same values as one occurrence.
+    if get_origin(kind) in (list, set, frozenset) and len(get_args(kind)) == 1:
+        kind = get_args(kind)[0]
+    return kind, info
 
 
 def _without_none(kind: Any) -> Any:
