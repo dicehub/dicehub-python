@@ -44,8 +44,28 @@ export DICEHUB_API_KEY=FROM_A_SECRET_MANAGER
 dicehub auth status --output json
 ```
 
-Successful and operational-error JSON use the `dicehub.cli/v1` envelope. Typer usage errors retain
-their normal exit code and formatting.
+Successful and operational-error JSON use the `dicehub.cli/v1` envelope.
+
+Usage errors exit with code 2 before a client is constructed. By default, stdout is empty and
+stderr contains exactly one cause line and one help command for the deepest valid command path:
+
+```text
+Error: Unknown option. Did you mean '--limit'?
+Run 'dicehub project list --help' for help.
+```
+
+Usage errors never echo unknown commands, unknown options, option values, argument values, or
+remaining arguments. Messages use fixed text, registered command and option names, and choices
+defined in code. Invalid values report the expected type, range, or choices. Positional parameters
+use their argument number. Suggestions contain only registered names. Help shown when a command
+group has no arguments remains unchanged.
+
+An explicit `--output json` or `--output=json` selects a usage-error JSON envelope on stdout, with
+empty stderr, as for operational errors. Detection works even when parsing stops before the flag;
+option values and tokens after `--` do not select JSON. The last explicit output flag selects the
+format; an invalid format uses text. JSON has `schema_version: "dicehub.cli/v1"`, `ok: false`,
+`data: null`, and `error` with `code: "USAGE_ERROR"`, `message`, and `retryable: false`. The message
+contains the safe cause and help command separated by a newline. The exit code remains 2.
 
 Credential and URL options are intentionally absent. Values come from trusted environment
 injection, not command arguments that can appear in process listings or shell history.
