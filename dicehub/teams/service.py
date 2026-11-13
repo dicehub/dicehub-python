@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pydantic import ValidationError
 
+import dicehub.teams._rest_calls as _rest_calls
 from dicehub._core.graphql import GraphQLExecutor
+from dicehub._core.rest_v2 import RestV2Executor
 from dicehub._core.status import raise_for_status
 from dicehub.errors import ProtocolError
 from dicehub.teams._graphql import (
@@ -15,10 +17,14 @@ from dicehub.teams.models import Team
 
 
 class TeamsService:
-    def __init__(self, graphql: GraphQLExecutor) -> None:
+    def __init__(self, graphql: GraphQLExecutor, *, rest_api: RestV2Executor | None = None) -> None:
         self._graphql = graphql
+        self._rest_api = rest_api
 
     def get_by_route(self, *, route: str) -> Team:
+        rest_variables: dict[str, object] = {"route": validated_route(route)}
+        if self._rest_api is not None:
+            return _rest_calls.get_by_route(self._rest_api, rest_variables)
         result = self._graphql.execute(
             operation_name="GetTeamByRoute",
             query=GET_TEAM_BY_ROUTE_QUERY,

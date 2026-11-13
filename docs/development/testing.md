@@ -71,6 +71,13 @@ request was sent once and that the error exposes no server details.
 `scripts/check_docs.py` owns relative file-link validation. Source-text searches for forbidden
 function names do not prove runtime safety and are not a substitute for behavior tests.
 
+The REST v2 contract tests cover both clients, fixed routes and credentials,
+query encoding, field mapping, cursor pages, response limits, redaction, cancellation,
+and failure without GraphQL fallback. Response safety cases cover oversized cursors,
+the resource text byte limit, and separate read and write failures when obtaining
+result credentials. The opt-in live comparison is documented in
+[REST v2 transport](../rest-v2.md).
+
 ## Live tests
 
 Live tests require `DICEHUB_LIVE_TEST=1`. Mutating tests require their additional explicit opt-in

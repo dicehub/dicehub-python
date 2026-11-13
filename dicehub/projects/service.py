@@ -4,7 +4,10 @@ from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
 
+import dicehub.projects._rest as _rest
+import dicehub.projects._rest_calls as _rest_calls
 from dicehub._core.graphql import GraphQLExecutor
+from dicehub._core.rest_v2 import RestV2Executor
 from dicehub._core.status import raise_for_status
 from dicehub.auth.models import IdentityMode
 from dicehub.errors import (
@@ -66,9 +69,13 @@ class ProjectsService(_ProjectMembersMixin):
         self,
         graphql: GraphQLExecutor,
         *,
+        rest: RestV2Executor | None = None,
+        rest_api: RestV2Executor | None = None,
         identity_mode: IdentityMode | None = None,
     ) -> None:
         self._graphql = graphql
+        self._rest_api = rest_api
+        self._rest = rest
         self._identity_mode = identity_mode
 
     def list(
@@ -83,6 +90,19 @@ class ProjectsService(_ProjectMembersMixin):
         limit: int = 20,
         cursor: str | None = None,
     ) -> ProjectPage:
+        if self._rest is not None:
+            params = _rest.list_query(
+                user_id=user_id,
+                group_id=group_id,
+                search_filter=search_filter,
+                order_by=order_by,
+                order=order,
+                offset=offset,
+                limit=limit,
+                cursor=cursor,
+            )
+            data = self._rest.get_rest_v2(path="api/v2/projects", params=params)
+            return _rest.project_page(data, params)
         valid_order_by = validated_enum(order_by, ProjectOrderField, "project order field")
         valid_order = validated_enum(order, SortOrder, "project sort order")
         result = self._graphql.execute(
@@ -118,6 +138,11 @@ class ProjectsService(_ProjectMembersMixin):
         )
 
     def get(self, *, project_id: str) -> ProjectDetail:
+        if self._rest is not None:
+            data = self._rest.get_rest_v2(
+                path=f"api/v2/projects/{_rest.project_id(project_id)}", params={}
+            )
+            return _rest.project_detail(data)
         result = self._graphql.execute(
             operation_name="GetProject",
             query=GET_PROJECT_QUERY,
@@ -131,6 +156,11 @@ class ProjectsService(_ProjectMembersMixin):
         return _project_detail_from_single(response.projects.get_project)
 
     def get_by_route(self, *, route: str) -> ProjectDetail:
+        if self._rest is not None:
+            data = self._rest.get_rest_v2(
+                path="api/v2/projects/by-route", params={"route": _rest.project_route(route)}
+            )
+            return _rest.project_detail(data)
         result = self._graphql.execute(
             operation_name="GetProjectByRoute",
             query=GET_PROJECT_BY_ROUTE_QUERY,
@@ -159,6 +189,8 @@ class ProjectsService(_ProjectMembersMixin):
             "groupId": validated_optional_id(group_id, "group ID"),
             "visibility": validated_enum(visibility, ProjectVisibility, "project visibility").value,
         }
+        if self._rest_api is not None:
+            return _rest_calls.create(self._rest_api, variables)
         response = self._execute_mutation(
             response_type=CreateProjectData,
             operation_name="CreateProject",
@@ -193,6 +225,8 @@ class ProjectsService(_ProjectMembersMixin):
                 else None
             ),
         }
+        if self._rest_api is not None:
+            return _rest_calls.update(self._rest_api, variables)
         response = self._execute_mutation(
             response_type=UpdateProjectData,
             operation_name="UpdateProject",
@@ -203,6 +237,12 @@ class ProjectsService(_ProjectMembersMixin):
 
     def move(self, *, project_id: str, to_group_id: str) -> None:
         self._require_session()
+        rest_variables: dict[str, object] = {
+            "projectId": validated_id(project_id, "project ID"),
+            "toGroupId": validated_id(to_group_id, "target group ID"),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.move(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=MoveProjectData,
             operation_name="MoveProject",
@@ -215,6 +255,9 @@ class ProjectsService(_ProjectMembersMixin):
         raise_for_status(response.projects.move_project.status)
 
     def delete(self, *, project_id: str) -> None:
+        rest_variables: dict[str, object] = {"projectId": validated_id(project_id, "project ID")}
+        if self._rest_api is not None:
+            return _rest_calls.delete(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=DeleteProjectData,
             operation_name="DeleteProject",

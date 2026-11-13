@@ -4,7 +4,9 @@ from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
 
+import dicehub.resources._rest_calls as _rest_calls
 from dicehub._core.graphql import GraphQLExecutor
+from dicehub._core.rest_v2 import RestV2Executor
 from dicehub._core.status import raise_for_status
 from dicehub.errors import (
     ConfigurationError,
@@ -52,10 +54,14 @@ _MAX_TEXT_RESPONSE_BYTES = 13 * 1024 * 1024
 
 
 class ResourcesService:
-    def __init__(self, graphql: GraphQLExecutor) -> None:
+    def __init__(self, graphql: GraphQLExecutor, *, rest_api: RestV2Executor | None = None) -> None:
         self._graphql = graphql
+        self._rest_api = rest_api
 
     def get(self, *, resource_id: str) -> Resource:
+        rest_variables: dict[str, object] = {"resourceId": validated_resource_id(resource_id)}
+        if self._rest_api is not None:
+            return _rest_calls.get(self._rest_api, rest_variables)
         result = self._graphql.execute(
             operation_name="GetResource",
             query=GET_RESOURCE_QUERY,
@@ -69,6 +75,12 @@ class ResourcesService:
         return _resource_from_payload(payload.resource)
 
     def get_by_key(self, *, namespace_id: str, path: str) -> Resource:
+        rest_variables: dict[str, object] = {
+            "namespaceId": validated_namespace_id(namespace_id),
+            "key": data_key(path),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.get_by_key(self._rest_api, rest_variables)
         result = self._graphql.execute(
             operation_name="GetResourceByKey",
             query=GET_RESOURCE_BY_KEY_QUERY,
@@ -103,6 +115,19 @@ class ResourcesService:
             raise ConfigurationError("Resource recursive flag is invalid.")
         if not isinstance(order, SortOrder):
             raise ConfigurationError("Resource sort order is invalid.")
+        rest_variables: dict[str, object] = {
+            "namespaceId": validated_namespace_id(namespace_id),
+            "path": data_key(validated_data_path(path, allow_empty=True), allow_empty=True),
+            "resourceType": resource_type.value if resource_type is not None else None,
+            "searchFilter": validated_search_filter(search_filter),
+            "deep": recursive,
+            "order": order.value,
+            "offset": float(validated_offset(offset)),
+            "limit": float(validated_page_size(limit)),
+            "cursor": validated_cursor(cursor),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.list(self._rest_api, rest_variables)
         result = self._graphql.execute(
             operation_name="ListResources",
             query=LIST_RESOURCES_QUERY,
@@ -131,6 +156,9 @@ class ResourcesService:
         )
 
     def get_text(self, *, resource_id: str) -> str:
+        rest_variables: dict[str, object] = {"resourceId": validated_resource_id(resource_id)}
+        if self._rest_api is not None:
+            return _rest_calls.get_text(self._rest_api, rest_variables)
         result = self._graphql.execute(
             operation_name="GetResourceText",
             query=GET_RESOURCE_TEXT_QUERY,
@@ -145,6 +173,13 @@ class ResourcesService:
         return validated_text_response(payload.content)
 
     def create_text(self, *, namespace_id: str, path: str, content: str) -> None:
+        rest_variables: dict[str, object] = {
+            "namespaceId": validated_namespace_id(namespace_id),
+            "key": data_key(path),
+            "content": validated_text(content),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.create_text(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=CreateResourceTextData,
             operation_name="CreateResourceText",
@@ -158,6 +193,12 @@ class ResourcesService:
         raise_for_status(response.resources.create_text.status)
 
     def set_text(self, *, resource_id: str, content: str) -> None:
+        rest_variables: dict[str, object] = {
+            "resourceId": validated_resource_id(resource_id),
+            "content": validated_text(content),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.set_text(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=SetResourceTextData,
             operation_name="SetResourceText",
@@ -170,6 +211,9 @@ class ResourcesService:
         raise_for_status(response.resources.set_text.status)
 
     def delete(self, *, resource_id: str) -> None:
+        rest_variables: dict[str, object] = {"resourceId": validated_resource_id(resource_id)}
+        if self._rest_api is not None:
+            return _rest_calls.delete(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=DeleteResourceData,
             operation_name="DeleteResource",

@@ -4,7 +4,9 @@ from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
 
+import dicehub.apps._rest_calls as _rest_calls
 from dicehub._core.graphql import GraphQLExecutor
+from dicehub._core.rest_v2 import RestV2Executor
 from dicehub._core.status import raise_for_status
 from dicehub.apps._graphql import (
     CREATE_APP_MUTATION,
@@ -52,8 +54,9 @@ _AMBIGUOUS_MUTATION_ERRORS = (TransportError, HTTPError, GraphQLError, ProtocolE
 
 
 class AppsService(_AppMembersMixin):
-    def __init__(self, graphql: GraphQLExecutor) -> None:
+    def __init__(self, graphql: GraphQLExecutor, *, rest_api: RestV2Executor | None = None) -> None:
         self._graphql = graphql
+        self._rest_api = rest_api
 
     def list(
         self,
@@ -69,6 +72,18 @@ class AppsService(_AppMembersMixin):
     ) -> AppPage:
         valid_order_by = validated_enum(order_by, AppOrderField, "app order field")
         valid_order = validated_enum(order, SortOrder, "app sort order")
+        rest_variables: dict[str, object] = {
+            "projectId": validated_id(project_id, "project ID"),
+            "searchFilter": validated_search_filter(search_filter),
+            "orderBy": valid_order_by.value,
+            "order": valid_order.value,
+            "offset": float(validated_offset(offset)),
+            "limit": float(validated_page_size(limit)),
+            "cursor": validated_cursor(cursor),
+            "isPublished": validated_optional_bool(is_published, "publication filter"),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.list(self._rest_api, rest_variables)
         result = self._graphql.execute(
             operation_name="ListApps",
             query=LIST_APPS_QUERY,
@@ -96,6 +111,9 @@ class AppsService(_AppMembersMixin):
         )
 
     def get(self, *, app_id: str) -> AppDetail:
+        rest_variables: dict[str, object] = {"appId": validated_id(app_id, "app ID")}
+        if self._rest_api is not None:
+            return _rest_calls.get(self._rest_api, rest_variables)
         result = self._graphql.execute(
             operation_name="GetApp",
             query=GET_APP_QUERY,
@@ -105,6 +123,9 @@ class AppsService(_AppMembersMixin):
         return _app_detail_from_single(response.apps.get_app)
 
     def get_by_route(self, *, route: str) -> AppDetail:
+        rest_variables: dict[str, object] = {"route": validated_route(route)}
+        if self._rest_api is not None:
+            return _rest_calls.get_by_route(self._rest_api, rest_variables)
         result = self._graphql.execute(
             operation_name="GetAppByRoute",
             query=GET_APP_BY_ROUTE_QUERY,
@@ -121,6 +142,14 @@ class AppsService(_AppMembersMixin):
         name: str,
         description: str | None = None,
     ) -> AppDetail:
+        rest_variables: dict[str, object] = {
+            "projectId": validated_id(project_id, "project ID"),
+            "templateId": validated_id(template_id, "template ID"),
+            "name": validated_name(name),
+            "description": validated_description(description),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.create(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=CreateAppData,
             operation_name="CreateApp",
@@ -147,6 +176,13 @@ class AppsService(_AppMembersMixin):
     ) -> None:
         if name is None and description is None:
             raise ConfigurationError("App update must include at least one change.")
+        rest_variables: dict[str, object] = {
+            "appId": validated_id(app_id, "app ID"),
+            "name": validated_name(name) if name is not None else None,
+            "description": validated_description(description),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.update(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=UpdateAppData,
             operation_name="UpdateApp",
@@ -160,6 +196,9 @@ class AppsService(_AppMembersMixin):
         raise_for_status(response.apps.update_app.status)
 
     def delete(self, *, app_id: str) -> None:
+        rest_variables: dict[str, object] = {"appId": validated_id(app_id, "app ID")}
+        if self._rest_api is not None:
+            return _rest_calls.delete(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=DeleteAppData,
             operation_name="DeleteApp",

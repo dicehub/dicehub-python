@@ -4,6 +4,11 @@
 
 - Make CLI usage errors short, omit input values, and support JSON with code `USAGE_ERROR`.
 - Add CLI group descriptions, command examples, environment help, `help`, `ls`, and `--version`.
+- Add `api_protocol="rest_v2"` for all existing SDK JSON methods in both clients,
+  including content, memberships, resources, keys, and run workflows. Keep public
+  models, REST v1 binary transfers, single-send writes, and strict response limits.
+- Add `project_reads="rest_v2"` to sync and async clients for project list, ID, and route
+  reads. Preserve existing models and cursor pagination; keep GraphQL as the default.
 
 ## 0.10.1 - 2026-10-23
 

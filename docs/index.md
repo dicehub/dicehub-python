@@ -31,6 +31,7 @@ CLI for automation.
 - [Resources and storage](resources.md)
 - [Groups](groups.md)
 - [Projects](projects.md)
+- [REST v2 transport](rest-v2.md)
 - [Membership selectors](memberships.md)
 - [Runs](runs.md)
 - [API-key project creation example](../examples/create_project_with_api_key.py)

@@ -65,6 +65,7 @@ class RunFlag(str, Enum):
     FINALIZER = "FINALIZER"
     UPDATING = "UPDATING"
     UPDATE_FAILED = "UPDATE_FAILED"
+    STARTING = "STARTING"
 
 
 class RunOrderField(str, Enum):

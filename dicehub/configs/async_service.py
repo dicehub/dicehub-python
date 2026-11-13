@@ -6,7 +6,9 @@ from typing import BinaryIO, TypeVar
 
 from pydantic import BaseModel
 
+import dicehub.configs._rest_async_calls as _rest_calls
 from dicehub._core.async_graphql import AsyncGraphQLExecutor
+from dicehub._core.rest_v2 import AsyncRestV2Executor
 from dicehub._core.status import raise_for_status
 from dicehub.configs._graphql import (
     CREATE_CONFIG_MUTATION,
@@ -81,8 +83,11 @@ _MAX_TEXT_RESPONSE_BYTES = 13 * 1024 * 1024
 
 
 class AsyncConfigsService:
-    def __init__(self, graphql: AsyncGraphQLExecutor) -> None:
+    def __init__(
+        self, graphql: AsyncGraphQLExecutor, *, rest_api: AsyncRestV2Executor | None = None
+    ) -> None:
         self._graphql = graphql
+        self._rest_api = rest_api
 
     async def list(
         self,
@@ -96,6 +101,16 @@ class AsyncConfigsService:
     ) -> ConfigPage:
         if not isinstance(order, SortOrder):
             raise ConfigurationError("Config sort order is invalid.")
+        rest_variables: dict[str, object] = {
+            "appId": validated_id(app_id, "app ID"),
+            "searchFilter": validated_search_filter(search_filter),
+            "order": order.value,
+            "offset": float(validated_offset(offset)),
+            "limit": float(validated_page_size(limit)),
+            "cursor": validated_cursor(cursor),
+        }
+        if self._rest_api is not None:
+            return await _rest_calls.list(self._rest_api, rest_variables)
         result = await self._graphql.execute(
             operation_name="ListConfigs",
             query=LIST_CONFIGS_QUERY,
@@ -121,6 +136,9 @@ class AsyncConfigsService:
         )
 
     async def get(self, *, config_id: str) -> Config:
+        rest_variables: dict[str, object] = {"configId": validated_id(config_id, "config ID")}
+        if self._rest_api is not None:
+            return await _rest_calls.get(self._rest_api, rest_variables)
         result = await self._graphql.execute(
             operation_name="GetConfig",
             query=GET_CONFIG_QUERY,
@@ -141,6 +159,16 @@ class AsyncConfigsService:
         name: str | None = None,
         description: str | None = None,
     ) -> Config:
+        rest_variables: dict[str, object] = {
+            "appId": validated_id(app_id, "app ID"),
+            "sourceConfigId": validated_id(source_config_id, "source config ID")
+            if source_config_id is not None
+            else None,
+            "name": validated_name(name),
+            "description": validated_description(description),
+        }
+        if self._rest_api is not None:
+            return await _rest_calls.create(self._rest_api, rest_variables)
         response = await self._execute_mutation(
             response_type=CreateConfigData,
             operation_name="CreateConfig",
@@ -171,6 +199,13 @@ class AsyncConfigsService:
     ) -> None:
         if name is None and description is None:
             raise ConfigurationError("Config update requires a name or description.")
+        rest_variables: dict[str, object] = {
+            "configId": validated_id(config_id, "config ID"),
+            "name": validated_name(name),
+            "description": validated_description(description),
+        }
+        if self._rest_api is not None:
+            return await _rest_calls.update(self._rest_api, rest_variables)
         response = await self._execute_mutation(
             response_type=UpdateConfigData,
             operation_name="UpdateConfig",
@@ -184,6 +219,9 @@ class AsyncConfigsService:
         raise_for_status(response.configs.update_config.status)
 
     async def delete(self, *, config_id: str) -> None:
+        rest_variables: dict[str, object] = {"configId": validated_id(config_id, "config ID")}
+        if self._rest_api is not None:
+            return await _rest_calls.delete(self._rest_api, rest_variables)
         response = await self._execute_mutation(
             response_type=DeleteConfigData,
             operation_name="DeleteConfig",
@@ -195,6 +233,12 @@ class AsyncConfigsService:
     async def import_geometry(self, *, config_id: str, filename: str) -> GeometryImportRuns:
         """Start the server-owned conversion and ordered geometry-setup runs."""
 
+        rest_variables: dict[str, object] = {
+            "configId": validated_id(config_id, "config ID"),
+            "filename": validated_geometry_filename(filename),
+        }
+        if self._rest_api is not None:
+            return await _rest_calls.import_geometry(self._rest_api, rest_variables)
         response = await self._execute_mutation(
             response_type=ImportConfigGeometryData,
             operation_name="ImportConfigGeometry",
@@ -235,6 +279,18 @@ class AsyncConfigsService:
             raise ConfigurationError("Config recursive flag is invalid.")
         if not isinstance(order, SortOrder):
             raise ConfigurationError("Config sort order is invalid.")
+        rest_variables: dict[str, object] = {
+            "configId": validated_id(config_id, "config ID"),
+            "area": area.value,
+            "path": validated_content_path(path, allow_empty=True) or None,
+            "deep": recursive,
+            "order": order.value,
+            "offset": float(validated_offset(offset)),
+            "limit": float(validated_page_size(limit)),
+            "cursor": validated_cursor(cursor),
+        }
+        if self._rest_api is not None:
+            return await _rest_calls.list_content(self._rest_api, rest_variables)
         result = await self._graphql.execute(
             operation_name="ListConfigContent",
             query=LIST_CONFIG_CONTENT_QUERY,
@@ -268,6 +324,12 @@ class AsyncConfigsService:
         )
 
     async def get_text(self, *, config_id: str, path: str) -> str:
+        rest_variables: dict[str, object] = {
+            "configId": validated_id(config_id, "config ID"),
+            "path": validated_content_path(path),
+        }
+        if self._rest_api is not None:
+            return await _rest_calls.get_text(self._rest_api, rest_variables)
         result = await self._graphql.execute(
             operation_name="GetConfigText",
             query=GET_CONFIG_TEXT_QUERY,
@@ -285,6 +347,13 @@ class AsyncConfigsService:
         return payload.content
 
     async def set_text(self, *, config_id: str, path: str, content: str) -> None:
+        rest_variables: dict[str, object] = {
+            "configId": validated_id(config_id, "config ID"),
+            "path": validated_content_path(path),
+            "content": validated_text_content(content),
+        }
+        if self._rest_api is not None:
+            return await _rest_calls.set_text(self._rest_api, rest_variables)
         response = await self._execute_mutation(
             response_type=SetConfigTextData,
             operation_name="SetConfigText",
@@ -304,6 +373,13 @@ class AsyncConfigsService:
         path: str,
         updates: Sequence[ConfigValueUpdate],
     ) -> None:
+        rest_variables: dict[str, object] = {
+            "configId": validated_id(config_id, "config ID"),
+            "path": validated_yaml_path(path),
+            "updates": validated_config_value_updates(updates),
+        }
+        if self._rest_api is not None:
+            return await _rest_calls.set_values(self._rest_api, rest_variables)
         response = await self._execute_mutation(
             response_type=SetConfigValuesData,
             operation_name="SetConfigValues",
@@ -325,6 +401,13 @@ class AsyncConfigsService:
     ) -> None:
         if not isinstance(area, ConfigContentArea):
             raise ConfigurationError("Config content area is invalid.")
+        rest_variables: dict[str, object] = {
+            "configId": validated_id(config_id, "config ID"),
+            "area": area.value,
+            "path": validated_content_path(path),
+        }
+        if self._rest_api is not None:
+            return await _rest_calls.delete_content(self._rest_api, rest_variables)
         response = await self._execute_mutation(
             response_type=DeleteConfigContentData,
             operation_name="DeleteConfigContent",

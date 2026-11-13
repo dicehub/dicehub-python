@@ -4,9 +4,11 @@ from collections.abc import Generator, Sequence
 from time import monotonic, sleep
 from typing import BinaryIO, TypeVar
 
-from pydantic import BaseModel, SecretStr, ValidationError
+from pydantic import BaseModel, SecretStr
 
+import dicehub.runs._rest_calls as _rest_calls
 from dicehub._core.graphql import GraphQLExecutor
+from dicehub._core.rest_v2 import RestV2Executor
 from dicehub._core.status import raise_for_status
 from dicehub.errors import (
     ConfigurationError,
@@ -32,9 +34,6 @@ from dicehub.runs._graphql import (
     GetRunResultS3CredentialsData,
     GetRunStatusData,
     ListRunsData,
-    RunDetailPayload,
-    RunPayload,
-    RunStatusPayload,
     StartRunData,
     StopRunData,
 )
@@ -45,6 +44,27 @@ from dicehub.runs._machine_types import (
     ListMachineTypesData,
     machine_product_ids,
     machine_types_from_payloads,
+)
+from dicehub.runs._responses import (
+    _meaningful_status as _meaningful_status,
+)
+from dicehub.runs._responses import (
+    _run_detail_from_payload as _run_detail_from_payload,
+)
+from dicehub.runs._responses import (
+    _run_from_payload as _run_from_payload,
+)
+from dicehub.runs._responses import (
+    _run_status_from_payload as _run_status_from_payload,
+)
+from dicehub.runs._responses import (
+    _run_timeout as _run_timeout,
+)
+from dicehub.runs._responses import (
+    _unknown_mutation_outcome as _unknown_mutation_outcome,
+)
+from dicehub.runs._responses import (
+    _validated_response as _validated_response,
 )
 from dicehub.runs._validation import (
     MAX_RESULT_ARCHIVE_BYTES,
@@ -65,11 +85,7 @@ from dicehub.runs._validation import (
 )
 from dicehub.runs.models import (
     MachineType,
-    Run,
     RunDetail,
-    RunError,
-    RunExecutionStatus,
-    RunFlag,
     RunOrderField,
     RunPage,
     RunResultS3Credentials,
@@ -85,10 +101,13 @@ _TERMINAL_STATES = _TERMINAL_FAILURE_STATES | {RunState.FINISHED, RunState.STOPP
 
 
 class RunsService:
-    def __init__(self, graphql: GraphQLExecutor) -> None:
+    def __init__(self, graphql: GraphQLExecutor, *, rest_api: RestV2Executor | None = None) -> None:
         self._graphql = graphql
+        self._rest_api = rest_api
 
     def list_machine_types(self) -> tuple[MachineType, ...]:
+        if self._rest_api is not None:
+            return _rest_calls.list_machine_types(self._rest_api)
         result = self._graphql.execute(
             operation_name="ListMachineTypes",
             query=LIST_MACHINE_TYPES_QUERY,
@@ -130,6 +149,20 @@ class RunsService:
     ) -> RunPage:
         valid_order_by = validated_enum(order_by, RunOrderField, "run order field")
         valid_order = validated_enum(order, SortOrder, "run sort order")
+        rest_variables: dict[str, object] = {
+            "namespaceId": validated_id(namespace_id, "namespace ID"),
+            "includeDescendants": validated_bool(include_descendants, "include-descendants flag"),
+            "appId": validated_optional_id(app_id, "app ID"),
+            "runTypes": validated_enum_values(run_types, RunType, "run types"),
+            "states": validated_enum_values(states, RunState, "run states"),
+            "orderBy": valid_order_by.value,
+            "order": valid_order.value,
+            "offset": validated_offset(offset),
+            "limit": validated_page_size(limit),
+            "cursor": validated_cursor(cursor),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.list(self._rest_api, rest_variables)
         result = self._graphql.execute(
             operation_name="ListRuns",
             query=LIST_RUNS_QUERY,
@@ -162,6 +195,9 @@ class RunsService:
         )
 
     def get(self, *, run_id: str) -> RunDetail:
+        rest_variables: dict[str, object] = {"runId": validated_uuid(run_id, "run ID")}
+        if self._rest_api is not None:
+            return _rest_calls.get(self._rest_api, rest_variables)
         result = self._graphql.execute(
             operation_name="GetRun",
             query=GET_RUN_QUERY,
@@ -217,6 +253,9 @@ class RunsService:
         )
 
     def _status(self, run_id: str, *, timeout_cap: float | None = None) -> RunStatus:
+        rest_variables: dict[str, object] = {"runId": run_id}
+        if self._rest_api is not None:
+            return _rest_calls._status(self._rest_api, rest_variables, timeout_cap=timeout_cap)
         if timeout_cap is None:
             result = self._graphql.execute(
                 operation_name="GetRunStatus",
@@ -313,6 +352,10 @@ class RunsService:
         valid_app_id = validated_id(app_id, "app ID")
         valid_run_id = validated_uuid(run_id, "run ID")
         valid_regenerate = validated_bool(regenerate, "regenerate flag")
+        if self._rest_api is not None:
+            return _rest_calls.get_result_s3_credentials(
+                self._rest_api, valid_app_id, valid_run_id, valid_regenerate
+            )
         folder_result = self._graphql.execute(
             operation_name="GetRunResultFolder",
             query=GET_RUN_RESULT_FOLDER_QUERY,
@@ -362,6 +405,15 @@ class RunsService:
         cpu_count: int | None = None,
         notify: bool = False,
     ) -> RunStatus:
+        rest_variables: dict[str, object] = {
+            "configId": validated_id(config_id, "config ID"),
+            "machineTypeId": validated_machine_type_id(machine_type_id),
+            "nodeCount": validated_positive_count(node_count, "node count"),
+            "cpuCount": validated_optional_positive_count(cpu_count, "CPU count"),
+            "notify": validated_bool(notify, "notify flag"),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.start(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=StartRunData,
             operation_name="StartRun",
@@ -381,6 +433,9 @@ class RunsService:
         return _run_status_from_payload(payload.run)
 
     def stop(self, *, run_id: str) -> None:
+        rest_variables: dict[str, object] = {"runId": validated_uuid(run_id, "run ID")}
+        if self._rest_api is not None:
+            return _rest_calls.stop(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=StopRunData,
             operation_name="StopRun",
@@ -409,91 +464,3 @@ class RunsService:
             mapped_error = _unknown_mutation_outcome(request_id=error.request_id)
         assert mapped_error is not None
         raise mapped_error
-
-
-def _validated_response(
-    response_type: type[WireModelT],
-    data: dict[str, object],
-) -> WireModelT:
-    response: WireModelT | None = None
-    try:
-        response = response_type.model_validate(data)
-    except ValidationError:
-        pass
-    if response is None:
-        raise ProtocolError("dicehub returned an incompatible run response.")
-    return response
-
-
-def _run_from_payload(payload: RunPayload) -> Run:
-    return Run(
-        run_id=payload.run_id,
-        namespace_id=payload.namespace_id,
-        name=payload.name,
-        state=RunState(payload.state),
-        run_type=RunType(payload.run_type) if payload.run_type is not None else None,
-        created_at=payload.created_at,
-        updated_at=payload.updated_at,
-    )
-
-
-def _run_detail_from_payload(payload: RunDetailPayload) -> RunDetail:
-    return RunDetail(
-        **_run_from_payload(payload).model_dump(),
-        run_internal_id=payload.run_internal_id,
-        machine_type_id=payload.machine_type_id,
-        node_count=payload.node_count,
-        cpu_count=payload.cpu_count,
-        execution_status=(
-            RunExecutionStatus(payload.execution_status)
-            if payload.execution_status is not None
-            else None
-        ),
-        error=RunError(payload.error) if payload.error is not None else None,
-        flags=tuple(RunFlag(flag) for flag in payload.flags or ()),
-        template_version=payload.template_version,
-        module=payload.module,
-        flow=payload.flow,
-        queue=payload.queue,
-        study_id=payload.study_id,
-        stage=payload.stage,
-        batch=payload.batch,
-    )
-
-
-def _run_status_from_payload(payload: RunStatusPayload) -> RunStatus:
-    return RunStatus(
-        run_id=payload.run_id,
-        state=RunState(payload.state),
-        execution_status=(
-            RunExecutionStatus(payload.execution_status)
-            if payload.execution_status is not None
-            else None
-        ),
-        error=RunError(payload.error) if payload.error is not None else None,
-        flags=tuple(RunFlag(flag) for flag in payload.flags or ()),
-        updated_at=payload.updated_at,
-    )
-
-
-def _unknown_mutation_outcome(*, request_id: str | None = None) -> MutationOutcomeUnknownError:
-    return MutationOutcomeUnknownError(
-        "The run mutation may have completed, but dicehub did not confirm its outcome.",
-        request_id=request_id,
-    )
-
-
-def _meaningful_status(status: RunStatus) -> tuple[object, ...]:
-    return (status.state, status.execution_status, status.error, frozenset(status.flags))
-
-
-def _run_timeout(
-    run_id: str,
-    timeout_seconds: float,
-    last_status: RunStatus | None,
-) -> RunTimeoutError:
-    return RunTimeoutError(
-        run_id=run_id,
-        timeout_seconds=timeout_seconds,
-        last_status=last_status,
-    )

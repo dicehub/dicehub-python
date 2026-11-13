@@ -6,6 +6,12 @@ import httpx
 
 from dicehub._core.defaults import DEFAULT_BASE_URL
 from dicehub._core.graphql import GraphQLTransport
+from dicehub._core.rest_v2 import (
+    ApiProtocol,
+    ProjectReads,
+    validate_api_protocol,
+    validate_project_reads,
+)
 from dicehub.api_keys.service import ApiKeysService
 from dicehub.apps.service import AppsService
 from dicehub.auth.models import IdentityMode
@@ -30,9 +36,13 @@ class Client:
         base_url: str = DEFAULT_BASE_URL,
         api_key: str | None = None,
         session_cookie: str | None = None,
+        project_reads: ProjectReads = "graphql",
+        api_protocol: ApiProtocol = "graphql",
         timeout: float = 10.0,
         transport: httpx.BaseTransport | None = None,
     ) -> None:
+        validate_project_reads(project_reads)
+        validate_api_protocol(api_protocol)
         self._graphql = GraphQLTransport(
             base_url=base_url,
             api_key=api_key,
@@ -45,28 +55,47 @@ class Client:
         )
         self.auth = AuthService(
             self._graphql,
+            rest_api=self._graphql if api_protocol == "rest_v2" else None,
             expected_identity_mode=expected_identity_mode,
         )
         self.api_keys = ApiKeysService(
             self._graphql,
+            rest_api=self._graphql if api_protocol == "rest_v2" else None,
             identity_mode=expected_identity_mode,
         )
-        self.apps = AppsService(self._graphql)
-        self.configs = ConfigsService(self._graphql)
+        self.apps = AppsService(
+            self._graphql, rest_api=self._graphql if api_protocol == "rest_v2" else None
+        )
+        self.configs = ConfigsService(
+            self._graphql, rest_api=self._graphql if api_protocol == "rest_v2" else None
+        )
         self.groups = GroupsService(
             self._graphql,
+            rest_api=self._graphql if api_protocol == "rest_v2" else None,
             identity_mode=expected_identity_mode,
         )
         self.projects = ProjectsService(
             self._graphql,
+            rest_api=self._graphql if api_protocol == "rest_v2" else None,
+            rest=self._graphql if project_reads == "rest_v2" or api_protocol == "rest_v2" else None,
             identity_mode=expected_identity_mode,
         )
-        self.resources = ResourcesService(self._graphql)
-        self.runs = RunsService(self._graphql)
+        self.resources = ResourcesService(
+            self._graphql, rest_api=self._graphql if api_protocol == "rest_v2" else None
+        )
+        self.runs = RunsService(
+            self._graphql, rest_api=self._graphql if api_protocol == "rest_v2" else None
+        )
         self.storage = StorageService(self._graphql)
-        self.teams = TeamsService(self._graphql)
-        self.templates = TemplatesService(self._graphql)
-        self.users = UsersService(self._graphql)
+        self.teams = TeamsService(
+            self._graphql, rest_api=self._graphql if api_protocol == "rest_v2" else None
+        )
+        self.templates = TemplatesService(
+            self._graphql, rest_api=self._graphql if api_protocol == "rest_v2" else None
+        )
+        self.users = UsersService(
+            self._graphql, rest_api=self._graphql if api_protocol == "rest_v2" else None
+        )
 
     def close(self) -> None:
         self._graphql.close()

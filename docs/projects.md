@@ -9,6 +9,8 @@ read_when:
 
 # Projects
 
+For the optional REST transport, see [REST v2 project reads](rest-v2.md).
+
 ## Read projects
 
 API keys can list permission-scoped projects and resolve one project by immutable ID or route:

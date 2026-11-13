@@ -4,7 +4,9 @@ from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
 
+import dicehub.apps._rest_calls as _rest_calls
 from dicehub._core.graphql import GraphQLExecutor
+from dicehub._core.rest_v2 import RestV2Executor
 from dicehub._core.status import raise_for_status
 from dicehub.apps._member_graphql import (
     ADD_APP_MEMBER_MUTATION,
@@ -59,9 +61,13 @@ _AMBIGUOUS_MUTATION_ERRORS = (TransportError, HTTPError, GraphQLError, ProtocolE
 
 
 class _AppMembersMixin:
+    _rest_api: RestV2Executor | None
     _graphql: GraphQLExecutor
 
     def list_roles(self, *, app_id: str) -> tuple[AppRole, ...]:
+        rest_variables: dict[str, object] = {"appId": validated_id(app_id, "app ID")}
+        if self._rest_api is not None:
+            return _rest_calls.list_roles(self._rest_api, rest_variables)
         result = self._graphql.execute(
             operation_name="ListAppRoles",
             query=LIST_APP_ROLES_QUERY,
@@ -103,6 +109,8 @@ class _AppMembersMixin:
             limit=limit,
             cursor=cursor,
         )
+        if self._rest_api is not None:
+            return _rest_calls.list_user_members(self._rest_api, variables)
         result = self._graphql.execute(
             operation_name="ListAppUserMemberships",
             query=LIST_APP_USER_MEMBERSHIPS_QUERY,
@@ -144,6 +152,8 @@ class _AppMembersMixin:
             limit=limit,
             cursor=cursor,
         )
+        if self._rest_api is not None:
+            return _rest_calls.list_team_members(self._rest_api, variables)
         result = self._graphql.execute(
             operation_name="ListAppTeamMemberships",
             query=LIST_APP_TEAM_MEMBERSHIPS_QUERY,
@@ -173,6 +183,16 @@ class _AppMembersMixin:
         role_id: str,
         visibility: MembershipVisibility = MembershipVisibility.PRIVATE,
     ) -> None:
+        rest_variables: dict[str, object] = {
+            "appId": validated_id(app_id, "app ID"),
+            "memberId": validated_id(member_id, "member ID"),
+            "roleId": validated_id(role_id, "role ID"),
+            "visibility": validated_enum(
+                visibility, MembershipVisibility, "membership visibility"
+            ).value,
+        }
+        if self._rest_api is not None:
+            return _rest_calls.add_member(self._rest_api, rest_variables)
         response = self._execute_member_mutation(
             response_type=AddAppMemberData,
             operation_name="AddAppMember",
@@ -200,6 +220,18 @@ class _AppMembersMixin:
     ) -> None:
         if role_id is None and visibility is None:
             raise ConfigurationError("App member update must include at least one change.")
+        rest_variables: dict[str, object] = {
+            "appId": validated_id(app_id, "app ID"),
+            "memberId": validated_id(member_id, "member ID"),
+            "roleId": validated_id(role_id, "role ID") if role_id is not None else None,
+            "visibility": validated_enum(
+                visibility, MembershipVisibility, "membership visibility"
+            ).value
+            if visibility is not None
+            else None,
+        }
+        if self._rest_api is not None:
+            return _rest_calls.update_member(self._rest_api, rest_variables)
         response = self._execute_member_mutation(
             response_type=UpdateAppMemberData,
             operation_name="UpdateAppMember",
@@ -222,6 +254,12 @@ class _AppMembersMixin:
         raise_for_status(response.apps.update_member.status)
 
     def remove_member(self, *, app_id: str, member_id: str) -> None:
+        rest_variables: dict[str, object] = {
+            "appId": validated_id(app_id, "app ID"),
+            "memberId": validated_id(member_id, "member ID"),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.remove_member(self._rest_api, rest_variables)
         response = self._execute_member_mutation(
             response_type=RemoveAppMemberData,
             operation_name="RemoveAppMember",
