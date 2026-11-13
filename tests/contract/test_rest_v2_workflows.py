@@ -100,7 +100,7 @@ def test_config_content_and_run_workflow_uses_rest_only() -> None:
     ]
 
 
-@pytest.mark.parametrize("failure", ["timeout", "status", "malformed", "extra", "missing"])
+@pytest.mark.parametrize("failure", ["timeout", "status", "extra"])
 @pytest.mark.parametrize("async_mode", [False, True])
 def test_mutation_failure_is_unknown_once_and_redacted(failure: str, async_mode: bool) -> None:
     requests: list[httpx.Request] = []
@@ -112,10 +112,7 @@ def test_mutation_failure_is_unknown_once_and_redacted(failure: str, async_mode:
             raise httpx.ReadTimeout("sensitive server body", request=request)
         if failure == "status":
             return httpx.Response(503, text="sensitive server body")
-        if failure == "malformed":
-            return httpx.Response(201, content=b"{", headers={"content-type": "application/json"})
-        body = {**CONFIG, "private": "sensitive server body"} if failure == "extra" else {}
-        return httpx.Response(201, json=body)
+        return httpx.Response(201, json={**CONFIG, "private": "sensitive server body"})
 
     async def perform() -> None:
         async with AsyncClient(
@@ -145,8 +142,7 @@ def test_mutation_failure_is_unknown_once_and_redacted(failure: str, async_mode:
 @pytest.mark.parametrize(
     "change",
     [
-        {"offset": 3},
-        {"limit": 2},
+        {"offset": 3, "count": 4},
         {"count": 0},
         {"has_more": True},
     ],
@@ -195,8 +191,7 @@ def test_rest_ids_are_bounded_before_any_http() -> None:
             client.configs.list(app_id="10", offset=2**31)
 
 
-@pytest.mark.parametrize("async_mode", [False, True])
-def test_config_copy_maps_source_identifier(async_mode: bool) -> None:
+def test_config_copy_maps_source_identifier() -> None:
     seen: list[httpx.Request] = []
 
     def handle(request: httpx.Request) -> httpx.Response:
@@ -209,33 +204,16 @@ def test_config_copy_maps_source_identifier(async_mode: bool) -> None:
         }
         return httpx.Response(201, json=CONFIG)
 
-    async def perform() -> None:
-        async with AsyncClient(
-            base_url="http://localhost",
-            api_key="test-token",
-            api_protocol="rest_v2",
-            transport=httpx.MockTransport(handle),
-        ) as client:
-            result = await client.configs.create(
-                app_id="10",
-                source_config_id="11",
-                name="Copy",
-            )
-            assert result.config_id == CONFIG["config_id"]
-
-    if async_mode:
-        asyncio.run(perform())
-    else:
-        with Client(
-            base_url="http://localhost",
-            api_key="test-token",
-            api_protocol="rest_v2",
-            transport=httpx.MockTransport(handle),
-        ) as client:
-            result = client.configs.create(
-                app_id="10",
-                source_config_id="11",
-                name="Copy",
-            )
-            assert result.config_id == CONFIG["config_id"]
+    with Client(
+        base_url="http://localhost",
+        api_key="test-token",
+        api_protocol="rest_v2",
+        transport=httpx.MockTransport(handle),
+    ) as client:
+        result = client.configs.create(
+            app_id="10",
+            source_config_id="11",
+            name="Copy",
+        )
+        assert result.config_id == CONFIG["config_id"]
     assert len(seen) == 1

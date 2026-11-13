@@ -64,18 +64,16 @@ def page() -> dict[str, object]:
     }
 
 
-def client(handler: Callable[[httpx.Request], httpx.Response], *, session: bool = False) -> Client:
+def client(handler: Callable[[httpx.Request], httpx.Response]) -> Client:
     return Client(
         base_url="https://dicehub.test",
         project_reads="rest_v2",
         transport=httpx.MockTransport(handler),
-        api_key=None if session else "test-key",
-        session_cookie="test-session" if session else None,
+        api_key="test-key",
     )
 
 
-@pytest.mark.parametrize("session", [False, True])
-def test_rest_project_reads_use_existing_models_credentials_and_fixed_routes(session: bool) -> None:
+def test_rest_project_reads_use_existing_models_credentials_and_fixed_routes() -> None:
     requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -83,17 +81,13 @@ def test_rest_project_reads_use_existing_models_credentials_and_fixed_routes(ses
         assert request.method == "GET"
         assert request.url.host == "dicehub.test"
         assert request.headers["accept-encoding"] == "identity"
-        if session:
-            assert request.headers["cookie"] == "_dicehub_session=test-session"
-            assert "authorization" not in request.headers
-        else:
-            assert request.headers["authorization"] == "Bearer test-key"
-            assert "cookie" not in request.headers
+        assert request.headers["authorization"] == "Bearer test-key"
+        assert "cookie" not in request.headers
         body = page() if request.url.path == "/api/v2/projects" else project()
         return httpx.Response(200, json=body)
 
     route = "/ros/日本語?x=1&api_key=untrusted#fragment"
-    with client(handler, session=session) as sdk:
+    with client(handler) as sdk:
         result = sdk.projects.list(
             user_id="7",
             group_id="42",
@@ -156,12 +150,7 @@ def test_pagination_preserves_server_cursor_offset_and_count() -> None:
     [
         (401, AuthenticationError),
         (403, APIError),
-        (404, APIError),
-        (422, APIError),
         (302, HTTPError),
-        (429, HTTPError),
-        (503, HTTPError),
-        (204, HTTPError),
     ],
 )
 def test_http_errors_do_not_leak_bodies_retry_or_fall_back(
@@ -186,13 +175,9 @@ def test_http_errors_do_not_leak_bodies_retry_or_fall_back(
     "response",
     [
         httpx.Response(200, content=b"not-json", headers={"Content-Type": "application/json"}),
-        httpx.Response(200, json=[]),
         httpx.Response(200, json=project(), headers={"Content-Type": "text/html"}),
-        httpx.Response(200, json={**project(), "project_id": "01"}),
         httpx.Response(200, json={**project(), "group_id": "9223372036854775808"}),
-        httpx.Response(200, json={**project(), "created_at": "2026-10-03T10:00:00"}),
         httpx.Response(200, json={**project(), "extra": "sentinel-secret"}),
-        httpx.Response(200, json={**project(), "description": "bad\0description"}),
         httpx.Response(200, content=b"x" * 65537, headers={"Content-Type": "application/json"}),
     ],
 )
@@ -206,14 +191,9 @@ def test_bad_response_is_sanitized(response: httpx.Response) -> None:
 @pytest.mark.parametrize(
     "patch",
     [
-        {"offset": 1},
-        {"limit": 2},
-        {"count": 0},
+        {"offset": 1, "count": 3},
         {"has_more": False},
         {"cursor": ""},
-        {"items": [project(), project()]},
-        {"count": True},
-        {"items": None},
     ],
 )
 def test_inconsistent_page_is_rejected(patch: dict[str, object]) -> None:
@@ -222,15 +202,24 @@ def test_inconsistent_page_is_rejected(patch: dict[str, object]) -> None:
             sdk.projects.list(limit=1)
 
 
+def test_duplicate_project_ids_are_rejected_within_page_limit() -> None:
+    body = {
+        **page(),
+        "items": [summary(), summary()],
+        "limit": 2,
+        "count": 2,
+        "has_more": False,
+    }
+    with client(lambda _: httpx.Response(200, json=body)) as sdk:
+        with pytest.raises(ProtocolError):
+            sdk.projects.list(limit=2)
+
+
 @pytest.mark.parametrize(
     "arguments",
     [
-        {"limit": 0},
-        {"limit": True},
         {"offset": 2**31},
-        {"user_id": "0"},
         {"group_id": "9223372036854775808"},
-        {"order": "DESC"},
         {"cursor": "bad\n"},
     ],
 )

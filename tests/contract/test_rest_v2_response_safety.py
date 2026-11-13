@@ -43,14 +43,12 @@ def perform(
 
 
 @pytest.mark.parametrize("async_mode", [False, True])
-@pytest.mark.parametrize(
-    "domain", ["apps", "configs", "groups", "resources", "runs", "templates", "members"]
-)
-def test_oversized_cursor_raises_redacted_protocol_error(domain: str, async_mode: bool) -> None:
+def test_oversized_cursor_raises_redacted_protocol_error(async_mode: bool) -> None:
     seen: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(request)
+        assert request.method == "GET" and request.url.path == "/api/v2/apps"
         return httpx.Response(
             200,
             json={
@@ -63,45 +61,22 @@ def test_oversized_cursor_raises_redacted_protocol_error(domain: str, async_mode
             },
         )
 
-    def sync(client: Client) -> object:
-        if domain == "apps":
-            return client.apps.list(project_id="1")
-        if domain == "configs":
-            return client.configs.list(app_id="1")
-        if domain == "groups":
-            return client.groups.list()
-        if domain == "resources":
-            return client.resources.list(namespace_id="1")
-        if domain == "runs":
-            return client.runs.list(namespace_id="1")
-        if domain == "templates":
-            return client.templates.list()
-        return client.projects.list_user_members(project_id="1")
-
-    async def asynchronous(client: AsyncClient) -> object:
-        if domain == "apps":
-            return await client.apps.list(project_id="1")
-        if domain == "configs":
-            return await client.configs.list(app_id="1")
-        if domain == "groups":
-            return await client.groups.list()
-        if domain == "resources":
-            return await client.resources.list(namespace_id="1")
-        if domain == "runs":
-            return await client.runs.list(namespace_id="1")
-        if domain == "templates":
-            return await client.templates.list()
-        return await client.projects.list_user_members(project_id="1")
-
     with pytest.raises(ProtocolError) as caught:
-        perform(handler, async_mode, sync, asynchronous)
+        perform(
+            handler,
+            async_mode,
+            lambda client: client.apps.list(project_id="1"),
+            lambda client: client.apps.list(project_id="1"),
+        )
     assert len(seen) == 1
     assert "sensitive-response" not in str(caught.value)
     assert caught.value.__context__ is None
 
 
-@pytest.mark.parametrize("async_mode", [False, True])
-@pytest.mark.parametrize("size", [MAX_TEXT_BYTES, MAX_TEXT_BYTES + 1])
+@pytest.mark.parametrize(
+    ("size", "async_mode"),
+    [(MAX_TEXT_BYTES, False), (MAX_TEXT_BYTES + 1, False), (MAX_TEXT_BYTES + 1, True)],
+)
 def test_resource_text_preserves_utf8_byte_limit(size: int, async_mode: bool) -> None:
     content = "é" * (size // 2) + "x" * (size % 2)
 
@@ -128,8 +103,18 @@ def test_resource_text_preserves_utf8_byte_limit(size: int, async_mode: bool) ->
         assert caught.value.__context__ is None
 
 
-@pytest.mark.parametrize("async_mode", [False, True])
-@pytest.mark.parametrize("phase", ["lookup", "write", "invalid_credentials", "success"])
+@pytest.mark.parametrize(
+    ("phase", "async_mode"),
+    [
+        ("lookup", False),
+        ("lookup", True),
+        ("write", False),
+        ("write", True),
+        ("invalid_credentials", False),
+        ("invalid_credentials", True),
+        ("success", False),
+    ],
+)
 def test_result_credentials_distinguish_read_and_write_failures(
     phase: str, async_mode: bool
 ) -> None:

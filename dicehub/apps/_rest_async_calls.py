@@ -32,7 +32,9 @@ async def list(rest: AsyncRestV2Executor, variables: dict[str, object]) -> model
                 "offset": variables.get("offset"),
                 "limit": variables.get("limit"),
                 "cursor": variables.get("cursor"),
-                "is_published": variables.get("isPublished"),
+                "is_published": (
+                    "all" if variables.get("isPublished") is None else variables["isPublished"]
+                ),
             }
         ),
     )

@@ -7,6 +7,8 @@
 - Add `api_protocol="rest_v2"` for all existing SDK JSON methods in both clients,
   including content, memberships, resources, keys, and run workflows. Keep public
   models, REST v1 binary transfers, single-send writes, and strict response limits.
+- Preserve the default app list in REST mode by sending `is_published=all`.
+  Requires the matching server update; older servers fail explicitly with HTTP 422.
 - Add `project_reads="rest_v2"` to sync and async clients for project list, ID, and route
   reads. Preserve existing models and cursor pagination; keep GraphQL as the default.
 

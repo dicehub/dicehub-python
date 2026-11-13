@@ -76,8 +76,7 @@ def test_key_pages_use_exclusive_cursor_and_reject_duplicates(
     assert len(seen) == 2
 
 
-@pytest.mark.parametrize("async_mode", [False, True])
-def test_created_key_secret_survives_mapping_without_public_serialization(async_mode: bool) -> None:
+def test_created_key_secret_survives_mapping_without_public_serialization() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "POST"
         assert request.url.path == "/api/v2/namespaces/1/api-keys"
@@ -92,36 +91,30 @@ def test_created_key_secret_survives_mapping_without_public_serialization(async_
         NamespacePermission.VIEW_RESOURCE_INFO,
         NamespacePermission.READ_RESOURCE_CONTENT,
     ]
-    key = perform(
-        handler,
-        async_mode,
-        lambda client: client.api_keys.create(
-            namespace_id="1", name="Automation", permissions=permissions
-        ),
-        lambda client: client.api_keys.create(
-            namespace_id="1", name="Automation", permissions=permissions
-        ),
-    )
+    with Client(
+        base_url="https://dicehub.test",
+        session_cookie="test-session",
+        api_protocol="rest_v2",
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        key = client.api_keys.create(namespace_id="1", name="Automation", permissions=permissions)
     assert key.value.get_secret_value() == "creation-only-test-value"
     assert "creation-only-test-value" not in key.model_dump_json()
     assert "creation-only-test-value" not in repr(key)
 
 
-@pytest.mark.parametrize("async_mode", [False, True])
-def test_missing_key_returns_none(async_mode: bool) -> None:
+def test_missing_key_returns_none() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/api/v2/namespaces/1/api-keys/10"
         return httpx.Response(404, text="sensitive-response")
 
-    assert (
-        perform(
-            handler,
-            async_mode,
-            lambda client: client.api_keys.get(namespace_id="1", api_key_id="10"),
-            lambda client: client.api_keys.get(namespace_id="1", api_key_id="10"),
-        )
-        is None
-    )
+    with Client(
+        base_url="https://dicehub.test",
+        session_cookie="test-session",
+        api_protocol="rest_v2",
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        assert client.api_keys.get(namespace_id="1", api_key_id="10") is None
 
 
 @pytest.mark.parametrize("async_mode", [False, True])

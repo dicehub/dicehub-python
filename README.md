@@ -36,9 +36,6 @@ dicehub deployment.
 The same API is available through `dicehub.AsyncClient`. See the
 [async guide](https://github.com/dicehub/dicehub-python/blob/dev/docs/async.md).
 
-All existing SDK JSON operations can use an explicitly enabled REST v2 deployment. See
-[REST v2 transport](docs/rest-v2.md).
-
 ## CLI
 
 The CLI uses `DICEHUB_API_KEY` and connects to dicehub.com by default.

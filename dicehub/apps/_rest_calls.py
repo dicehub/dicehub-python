@@ -32,7 +32,9 @@ def list(rest: RestV2Executor, variables: dict[str, object]) -> models.AppPage:
                 "offset": variables.get("offset"),
                 "limit": variables.get("limit"),
                 "cursor": variables.get("cursor"),
-                "is_published": variables.get("isPublished"),
+                "is_published": (
+                    "all" if variables.get("isPublished") is None else variables["isPublished"]
+                ),
             }
         ),
     )
