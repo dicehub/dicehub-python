@@ -27,7 +27,7 @@ project_app = typer.Typer(
     no_args_is_help=True,
     rich_markup_mode=None,
 )
-project_app.add_typer(members_app, name="members")
+project_app.add_typer(members_app, name="members", help="Manage project members.")
 
 _OUTPUT_OPTION = typer.Option("--output", case_sensitive=False, help="Output format.")
 

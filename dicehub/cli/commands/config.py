@@ -30,7 +30,9 @@ content_app = typer.Typer(
     no_args_is_help=True,
     rich_markup_mode=None,
 )
-config_app.add_typer(content_app, name="content")
+config_app.add_typer(
+    content_app, name="content", help="Read and change configuration text and files."
+)
 
 _OUTPUT_OPTION = typer.Option("--output", case_sensitive=False, help="Output format.")
 

@@ -8,6 +8,35 @@ read_when:
 
 # CLI
 
+## Help and version
+
+Command groups have short descriptions. Each command help page ends with one to three examples;
+the first uses that command. Replace sample IDs, routes, and file names with your values.
+Supply required local files. For `api-key create`, connect the descriptor to a secret manager.
+
+```bash
+dicehub --help
+dicehub help project list
+dicehub help config content upload
+dicehub --version
+```
+
+`dicehub help` shows root help. `dicehub help [command...]` shows the same page as
+`dicehub [command...] --help`. Put `help` first; an unknown command path exits with code 2.
+`dicehub --version` prints only the package version (`dicehub.__version__`) and exits with code 0.
+
+Use `ls` for `list` in groups that have it: `dicehub project ls` or
+`dicehub config content ls 42 --area texts`. Membership groups have `list-users` and `list-teams`,
+so they do not accept `ls`. The aliases have no separate rows in command lists.
+
+Root and command help show an `Environment` block with `DICEHUB_API_KEY`, `DICEHUB_SESSION_COOKIE`,
+and `DICEHUB_URL`. The credential variables are mutually exclusive. The URL defaults to
+`https://dicehub.com` with an API key and to `http://127.0.0.1:8080` with a session cookie.
+Help and version do not read credentials, construct a client, or send
+requests. Help never displays environment values.
+
+## Commands and authentication
+
 The CLI is a thin adapter over the Python client:
 
 ```bash

@@ -23,8 +23,8 @@ group_app = typer.Typer(
     no_args_is_help=True,
     rich_markup_mode=None,
 )
-group_app.add_typer(avatar_app, name="avatar")
-group_app.add_typer(members_app, name="members")
+group_app.add_typer(avatar_app, name="avatar", help="Set or clear a group avatar.")
+group_app.add_typer(members_app, name="members", help="Manage group members.")
 
 _OUTPUT_OPTION = typer.Option("--output", case_sensitive=False, help="Output format.")
 
