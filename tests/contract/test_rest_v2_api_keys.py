@@ -11,7 +11,8 @@ import pytest
 
 from dicehub import AsyncClient, Client
 from dicehub.api_keys import NamespacePermission
-from dicehub.errors import ConfigurationError, ProtocolError
+from dicehub.api_keys._validation import MAX_SECRET_LENGTH
+from dicehub.errors import ConfigurationError, MutationOutcomeUnknownError, ProtocolError
 from tests.contract.test_rest_v2_response_safety import perform
 
 
@@ -101,6 +102,43 @@ def test_created_key_secret_survives_mapping_without_public_serialization() -> N
     assert key.value.get_secret_value() == "creation-only-test-value"
     assert "creation-only-test-value" not in key.model_dump_json()
     assert "creation-only-test-value" not in repr(key)
+
+
+@pytest.mark.parametrize(
+    ("async_mode", "value"),
+    [(False, ""), (True, "sensitive-response" + "x" * MAX_SECRET_LENGTH)],
+    ids=["sync-empty", "async-oversized"],
+)
+def test_invalid_created_secret_is_unknown_once_and_redacted(async_mode: bool, value: str) -> None:
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        assert request.method == "POST"
+        assert request.url.path == "/api/v2/namespaces/1/api-keys"
+        return httpx.Response(
+            201, json={**metadata("10"), "name": "sensitive-response", "value": value}
+        )
+
+    with pytest.raises(MutationOutcomeUnknownError) as caught:
+        perform(
+            handler,
+            async_mode,
+            lambda client: client.api_keys.create(
+                namespace_id="1",
+                name="Automation",
+                permissions=[NamespacePermission.VIEW_RESOURCE_INFO],
+            ),
+            lambda client: client.api_keys.create(
+                namespace_id="1",
+                name="Automation",
+                permissions=[NamespacePermission.VIEW_RESOURCE_INFO],
+            ),
+        )
+    assert len(seen) == 1
+    assert "sensitive-response" not in str(caught.value)
+    assert caught.value.__context__ is None
+    assert caught.value.__cause__ is None
 
 
 def test_missing_key_returns_none() -> None:

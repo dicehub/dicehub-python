@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import AwareDatetime, SecretStr
+from pydantic import AwareDatetime, Field, SecretStr
 
 from dicehub._core.rest_models import WireModel
+from dicehub.api_keys._validation import MAX_SECRET_LENGTH
 
 
 class ApiKeyDetail(WireModel):
@@ -35,7 +36,7 @@ class CreatedApiKeyDetail(WireModel):
     not_before: AwareDatetime | None
     expires_at: AwareDatetime | None
     validity_status: Literal["ACTIVE", "NOT_YET_ACTIVE", "EXPIRED"]
-    value: SecretStr
+    value: SecretStr = Field(min_length=1, max_length=MAX_SECRET_LENGTH)
 
 
 class ApiKeyList(WireModel):

@@ -43,6 +43,12 @@ Mutation decorators map unconfirmed outcomes without retaining exception chains.
 Binary transfers continue through REST v1. `project_reads="rest_v2"` remains a
 narrow project-read option. There is no fallback after a REST failure.
 
+GraphQL remains the default for both clients and the CLI. REST v2 is experimental
+and requires a compatible server with `/api/v2` enabled. App listing also requires
+the server's `is_published=all` support to preserve the SDK's default filter;
+servers without that support return HTTP 422. Keep GraphQL enabled for normal use
+until the paired server change and live SDK/server checks are complete.
+
 `_core/validation.py` owns shared ID, route, name, filter, and pagination checks. Domain validation
 modules keep their existing call signatures and error messages. Runs use the GraphQL `Int` offset
 limit; other list operations use the safe integer limit for GraphQL `Float`. Resource cursors accept
