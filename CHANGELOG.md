@@ -2,11 +2,14 @@
 
 ## Unreleased
 
+## 0.11.0 - 2026-11-15
+
 - Make CLI usage errors short, omit input values, and support JSON with code `USAGE_ERROR`.
 - Add CLI group descriptions, command examples, environment help, `help`, `ls`, and `--version`.
-- Add `api_protocol="rest_v2"` for all existing SDK JSON methods in both clients,
+- Add experimental `api_protocol="rest_v2"` for all existing SDK JSON methods in both clients,
   including content, memberships, resources, keys, and run workflows. Keep public
   models, REST v1 binary transfers, single-send writes, and strict response limits.
+  GraphQL remains the default; REST activation requires a compatible server and live validation.
 - Preserve the default app list in REST mode by sending `is_published=all`.
   Requires the matching server update; older servers fail explicitly with HTTP 422.
 - Report an unknown mutation outcome for invalid API-key creation secrets in REST mode,
