@@ -210,6 +210,7 @@ RunFlagValue = Literal[
     "FINALIZER",
     "UPDATING",
     "UPDATE_FAILED",
+    "STARTING",
 ]
 
 

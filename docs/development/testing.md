@@ -71,6 +71,18 @@ request was sent once and that the error exposes no server details.
 `scripts/check_docs.py` owns relative file-link validation. Source-text searches for forbidden
 function names do not prove runtime safety and are not a substitute for behavior tests.
 
+The REST v2 contract tests cover both clients, fixed routes and credentials,
+query encoding, field mapping, cursor pages, response limits, redaction, cancellation,
+and failure without GraphQL fallback. Response safety cases cover oversized cursors,
+the resource text byte limit, and separate read and write failures when obtaining
+result credentials. Shared wire validators use representative domain cases; oversized
+cursor checks use the common `WirePage` model through both clients. Keep separate
+sync and async failure paths, publication-filter regressions, and pagination checks
+for the independent project, generic-page, and API-key implementations.
+The opt-in project comparison is in
+`tests/integration/test_live_rest_v2_projects.py`; it requires both
+`DICEHUB_LIVE_TEST=1` and `DICEHUB_LIVE_REST_V2_TEST=1`.
+
 ## Live tests
 
 Live tests require `DICEHUB_LIVE_TEST=1`. Mutating tests require their additional explicit opt-in

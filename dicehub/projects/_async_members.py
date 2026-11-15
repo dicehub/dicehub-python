@@ -4,7 +4,9 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 
+import dicehub.projects._rest_async_calls as _rest_calls
 from dicehub._core.async_graphql import AsyncGraphQLExecutor
+from dicehub._core.rest_v2 import AsyncRestV2Executor
 from dicehub._core.status import raise_for_status
 from dicehub.errors import (
     ConfigurationError,
@@ -50,9 +52,13 @@ _AMBIGUOUS_MUTATION_ERRORS = (TransportError, HTTPError, GraphQLError, ProtocolE
 
 
 class _AsyncProjectMembersMixin:
+    _rest_api: AsyncRestV2Executor | None
     _graphql: AsyncGraphQLExecutor
 
     async def list_roles(self, *, project_id: str) -> tuple[ProjectRole, ...]:
+        rest_variables: dict[str, object] = {"projectId": validated_id(project_id, "project ID")}
+        if self._rest_api is not None:
+            return await _rest_calls.list_roles(self._rest_api, rest_variables)
         result = await self._graphql.execute(
             operation_name="ListProjectRoles",
             query=LIST_PROJECT_ROLES_QUERY,
@@ -95,6 +101,8 @@ class _AsyncProjectMembersMixin:
             limit=limit,
             cursor=cursor,
         )
+        if self._rest_api is not None:
+            return await _rest_calls.list_user_members(self._rest_api, variables)
         result = await self._graphql.execute(
             operation_name="ListProjectUserMemberships",
             query=LIST_PROJECT_USER_MEMBERSHIPS_QUERY,
@@ -136,6 +144,8 @@ class _AsyncProjectMembersMixin:
             limit=limit,
             cursor=cursor,
         )
+        if self._rest_api is not None:
+            return await _rest_calls.list_team_members(self._rest_api, variables)
         result = await self._graphql.execute(
             operation_name="ListProjectTeamMemberships",
             query=LIST_PROJECT_TEAM_MEMBERSHIPS_QUERY,
@@ -165,6 +175,16 @@ class _AsyncProjectMembersMixin:
         role_id: str,
         visibility: MembershipVisibility = MembershipVisibility.PRIVATE,
     ) -> None:
+        rest_variables: dict[str, object] = {
+            "projectId": validated_id(project_id, "project ID"),
+            "memberId": validated_id(member_id, "member ID"),
+            "roleId": validated_id(role_id, "role ID"),
+            "visibility": validated_enum(
+                visibility, MembershipVisibility, "membership visibility"
+            ).value,
+        }
+        if self._rest_api is not None:
+            return await _rest_calls.add_member(self._rest_api, rest_variables)
         response = await self._execute_member_mutation(
             response_type=AddProjectMemberData,
             operation_name="AddProjectMember",
@@ -192,6 +212,18 @@ class _AsyncProjectMembersMixin:
     ) -> None:
         if role_id is None and visibility is None:
             raise ConfigurationError("Project member update must include at least one change.")
+        rest_variables: dict[str, object] = {
+            "projectId": validated_id(project_id, "project ID"),
+            "memberId": validated_id(member_id, "member ID"),
+            "roleId": validated_id(role_id, "role ID") if role_id is not None else None,
+            "visibility": validated_enum(
+                visibility, MembershipVisibility, "membership visibility"
+            ).value
+            if visibility is not None
+            else None,
+        }
+        if self._rest_api is not None:
+            return await _rest_calls.update_member(self._rest_api, rest_variables)
         response = await self._execute_member_mutation(
             response_type=UpdateProjectMemberData,
             operation_name="UpdateProjectMember",
@@ -214,6 +246,12 @@ class _AsyncProjectMembersMixin:
         raise_for_status(response.projects.update_member.status)
 
     async def remove_member(self, *, project_id: str, member_id: str) -> None:
+        rest_variables: dict[str, object] = {
+            "projectId": validated_id(project_id, "project ID"),
+            "memberId": validated_id(member_id, "member ID"),
+        }
+        if self._rest_api is not None:
+            return await _rest_calls.remove_member(self._rest_api, rest_variables)
         response = await self._execute_member_mutation(
             response_type=RemoveProjectMemberData,
             operation_name="RemoveProjectMember",

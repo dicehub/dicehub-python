@@ -21,6 +21,13 @@ from dicehub._core.graphql import (
     _validated_credentials,
     _validated_origin,
 )
+from dicehub._core.rest_v2 import (
+    RestMethod,
+    RestParams,
+    require_rest_success,
+    rest_timeout,
+    validate_rest_path,
+)
 from dicehub.errors import (
     ConfigurationError,
     DiceHubError,
@@ -101,6 +108,53 @@ class AsyncGraphQLTransport:
         )
         self._timeout = timeout
         self._closed = False
+
+    async def get_rest_v2(self, *, path: str, params: dict[str, str | int]) -> dict[str, Any]:
+        return await self.request_rest_v2(method="GET", path=path, params={**params})
+
+    async def request_rest_v2(
+        self,
+        *,
+        method: RestMethod,
+        path: str,
+        params: RestParams | None = None,
+        body: dict[str, object] | None = None,
+        max_response_bytes: int = _MAX_RESPONSE_BYTES,
+        timeout_cap: float | None = None,
+    ) -> dict[str, Any]:
+        if self._closed:
+            raise ConfigurationError("dicehub client is closed.")
+        validate_rest_path(path)
+        if method not in {"GET", "POST", "PATCH", "PUT", "DELETE"}:
+            raise ConfigurationError("dicehub REST method is invalid.")
+        if (method in {"GET", "DELETE"} and body is not None) or (method != "GET" and params):
+            raise ConfigurationError("dicehub REST request parameters are invalid.")
+        request_timeout = rest_timeout(self._timeout, timeout_cap)
+        headers = {"X-Dicehub-Request": "rest-v2"} if method != "GET" else {}
+        mapped_error: DiceHubError | None = None
+        try:
+            async with self._client.stream(
+                method,
+                path,
+                params=params,
+                json=body,
+                headers=headers,
+                timeout=request_timeout,
+            ) as response:
+                require_rest_success(response)
+                _require_identity_encoding(response)
+                content = await _read_limited(response, max_response_bytes)
+        except httpx.InvalidURL:
+            mapped_error = ConfigurationError("The REST v2 request URL is too long or invalid.")
+        except httpx.TimeoutException:
+            mapped_error = TransportError("The request to dicehub timed out.")
+        except httpx.DecodingError:
+            mapped_error = ProtocolError("dicehub returned an unsupported content encoding.")
+        except httpx.RequestError:
+            mapped_error = TransportError("Could not connect to dicehub.")
+        if mapped_error is not None:
+            raise mapped_error
+        return _decoded_object(content, "REST v2")
 
     async def aclose(self) -> None:
         if not self._closed:

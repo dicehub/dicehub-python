@@ -5,7 +5,9 @@ from typing import BinaryIO, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
+import dicehub.groups._rest_calls as _rest_calls
 from dicehub._core.graphql import GraphQLExecutor
+from dicehub._core.rest_v2 import RestV2Executor
 from dicehub._core.status import raise_for_status
 from dicehub.auth.models import IdentityMode
 from dicehub.errors import (
@@ -64,9 +66,11 @@ class GroupsService(_GroupMembersMixin):
         self,
         graphql: GraphQLExecutor,
         *,
+        rest_api: RestV2Executor | None = None,
         identity_mode: IdentityMode | None = None,
     ) -> None:
         self._graphql = graphql
+        self._rest_api = rest_api
         self._identity_mode = identity_mode
 
     def list(
@@ -83,6 +87,18 @@ class GroupsService(_GroupMembersMixin):
     ) -> GroupPage:
         valid_order_by = validated_enum(order_by, GroupOrderField, "group order field")
         valid_order = validated_enum(order, SortOrder, "group sort order")
+        rest_variables: dict[str, object] = {
+            "userId": validated_optional_id(user_id, "user ID"),
+            "parentId": validated_optional_id(parent_id, "parent group ID"),
+            "searchFilter": validated_search_filter(search_filter),
+            "orderBy": valid_order_by.value,
+            "order": valid_order.value,
+            "offset": float(validated_offset(offset)),
+            "limit": float(validated_page_size(limit)),
+            "cursor": validated_cursor(cursor),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.list(self._rest_api, rest_variables)
         result = self._graphql.execute(
             operation_name="ListGroups",
             query=LIST_GROUPS_QUERY,
@@ -114,6 +130,9 @@ class GroupsService(_GroupMembersMixin):
         )
 
     def get(self, *, group_id: str) -> GroupDetail:
+        rest_variables: dict[str, object] = {"groupId": validated_id(group_id, "group ID")}
+        if self._rest_api is not None:
+            return _rest_calls.get(self._rest_api, rest_variables)
         result = self._graphql.execute(
             operation_name="GetGroup",
             query=GET_GROUP_QUERY,
@@ -127,6 +146,9 @@ class GroupsService(_GroupMembersMixin):
         return _group_detail_from_single(response.groups.get_group)
 
     def get_by_route(self, *, route: str) -> GroupDetail:
+        rest_variables: dict[str, object] = {"route": validated_route(route)}
+        if self._rest_api is not None:
+            return _rest_calls.get_by_route(self._rest_api, rest_variables)
         result = self._graphql.execute(
             operation_name="GetGroupByRoute",
             query=GET_GROUP_BY_ROUTE_QUERY,
@@ -150,6 +172,15 @@ class GroupsService(_GroupMembersMixin):
     ) -> GroupDetail:
         if parent_id is None:
             self._require_session("Top-level group creation")
+        rest_variables: dict[str, object] = {
+            "name": validated_name(name),
+            "slug": validated_slug(slug),
+            "description": validated_description(description),
+            "groupId": validated_optional_id(parent_id, "parent group ID"),
+            "visibility": validated_enum(visibility, GroupVisibility, "group visibility").value,
+        }
+        if self._rest_api is not None:
+            return _rest_calls.create(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=CreateGroupData,
             operation_name="CreateGroup",
@@ -183,6 +214,17 @@ class GroupsService(_GroupMembersMixin):
     ) -> None:
         if name is None and slug is None and description is None and visibility is None:
             raise ConfigurationError("Group update must include at least one change.")
+        rest_variables: dict[str, object] = {
+            "groupId": validated_id(group_id, "group ID"),
+            "name": validated_name(name) if name is not None else None,
+            "slug": validated_slug(slug) if slug is not None else None,
+            "description": validated_description(description),
+            "visibility": validated_enum(visibility, GroupVisibility, "group visibility").value
+            if visibility is not None
+            else None,
+        }
+        if self._rest_api is not None:
+            return _rest_calls.update(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=UpdateGroupData,
             operation_name="UpdateGroup",
@@ -205,6 +247,12 @@ class GroupsService(_GroupMembersMixin):
         valid_group_id = validated_id(group_id, "group ID")
         content = validated_avatar_png(source)
         encoded = base64.b64encode(content).decode("ascii")
+        rest_variables: dict[str, object] = {
+            "groupId": valid_group_id,
+            "avatar": f"data:image/png;base64,{encoded}",
+        }
+        if self._rest_api is not None:
+            return _rest_calls.set_avatar(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=UpdateGroupAvatarData,
             operation_name="UpdateGroupAvatar",
@@ -217,6 +265,12 @@ class GroupsService(_GroupMembersMixin):
         raise_for_status(response.groups.update_group.status)
 
     def clear_avatar(self, *, group_id: str) -> None:
+        rest_variables: dict[str, object] = {
+            "groupId": validated_id(group_id, "group ID"),
+            "avatar": "",
+        }
+        if self._rest_api is not None:
+            return _rest_calls.clear_avatar(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=UpdateGroupAvatarData,
             operation_name="UpdateGroupAvatar",
@@ -229,6 +283,9 @@ class GroupsService(_GroupMembersMixin):
         raise_for_status(response.groups.update_group.status)
 
     def delete(self, *, group_id: str) -> None:
+        rest_variables: dict[str, object] = {"groupId": validated_id(group_id, "group ID")}
+        if self._rest_api is not None:
+            return _rest_calls.delete(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=DeleteGroupData,
             operation_name="DeleteGroup",
@@ -239,6 +296,12 @@ class GroupsService(_GroupMembersMixin):
 
     def move(self, *, group_id: str, to_group_id: str) -> None:
         self._require_session("Group move")
+        rest_variables: dict[str, object] = {
+            "groupId": validated_id(group_id, "group ID"),
+            "toGroupId": validated_id(to_group_id, "target group ID"),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.move(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=MoveGroupData,
             operation_name="MoveGroup",

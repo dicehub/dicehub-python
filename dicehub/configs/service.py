@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Sequence
 from typing import BinaryIO, TypeVar
-from urllib.parse import quote
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
+import dicehub.configs._rest_calls as _rest_calls
 from dicehub._core.graphql import GraphQLExecutor
+from dicehub._core.rest_v2 import RestV2Executor
 from dicehub._core.status import raise_for_status
 from dicehub.configs._graphql import (
     CREATE_CONFIG_MUTATION,
@@ -20,7 +21,6 @@ from dicehub.configs._graphql import (
     SET_CONFIG_TEXT_MUTATION,
     SET_CONFIG_VALUES_MUTATION,
     UPDATE_CONFIG_MUTATION,
-    ConfigPayload,
     CreateConfigData,
     DeleteConfigContentData,
     DeleteConfigData,
@@ -32,6 +32,24 @@ from dicehub.configs._graphql import (
     SetConfigTextData,
     SetConfigValuesData,
     UpdateConfigData,
+)
+from dicehub.configs._responses import (
+    _bounded_file_chunks as _bounded_file_chunks,
+)
+from dicehub.configs._responses import (
+    _config_from_payload as _config_from_payload,
+)
+from dicehub.configs._responses import (
+    _file_endpoint as _file_endpoint,
+)
+from dicehub.configs._responses import (
+    _run_status_from_payload as _run_status_from_payload,
+)
+from dicehub.configs._responses import (
+    _unknown_mutation_outcome as _unknown_mutation_outcome,
+)
+from dicehub.configs._responses import (
+    _validated_response as _validated_response,
 )
 from dicehub.configs._validation import (
     MAX_FILE_BYTES,
@@ -68,8 +86,6 @@ from dicehub.errors import (
     TransportError,
 )
 from dicehub.projects.models import SortOrder
-from dicehub.runs._graphql import RunStatusPayload
-from dicehub.runs.models import RunError, RunExecutionStatus, RunFlag, RunState, RunStatus
 
 WireModelT = TypeVar("WireModelT", bound=BaseModel)
 _AMBIGUOUS_MUTATION_ERRORS = (TransportError, HTTPError, GraphQLError, ProtocolError)
@@ -77,8 +93,9 @@ _MAX_TEXT_RESPONSE_BYTES = 13 * 1024 * 1024
 
 
 class ConfigsService:
-    def __init__(self, graphql: GraphQLExecutor) -> None:
+    def __init__(self, graphql: GraphQLExecutor, *, rest_api: RestV2Executor | None = None) -> None:
         self._graphql = graphql
+        self._rest_api = rest_api
 
     def list(
         self,
@@ -92,6 +109,16 @@ class ConfigsService:
     ) -> ConfigPage:
         if not isinstance(order, SortOrder):
             raise ConfigurationError("Config sort order is invalid.")
+        rest_variables: dict[str, object] = {
+            "appId": validated_id(app_id, "app ID"),
+            "searchFilter": validated_search_filter(search_filter),
+            "order": order.value,
+            "offset": float(validated_offset(offset)),
+            "limit": float(validated_page_size(limit)),
+            "cursor": validated_cursor(cursor),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.list(self._rest_api, rest_variables)
         result = self._graphql.execute(
             operation_name="ListConfigs",
             query=LIST_CONFIGS_QUERY,
@@ -117,6 +144,9 @@ class ConfigsService:
         )
 
     def get(self, *, config_id: str) -> Config:
+        rest_variables: dict[str, object] = {"configId": validated_id(config_id, "config ID")}
+        if self._rest_api is not None:
+            return _rest_calls.get(self._rest_api, rest_variables)
         result = self._graphql.execute(
             operation_name="GetConfig",
             query=GET_CONFIG_QUERY,
@@ -137,6 +167,16 @@ class ConfigsService:
         name: str | None = None,
         description: str | None = None,
     ) -> Config:
+        rest_variables: dict[str, object] = {
+            "appId": validated_id(app_id, "app ID"),
+            "sourceConfigId": validated_id(source_config_id, "source config ID")
+            if source_config_id is not None
+            else None,
+            "name": validated_name(name),
+            "description": validated_description(description),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.create(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=CreateConfigData,
             operation_name="CreateConfig",
@@ -167,6 +207,13 @@ class ConfigsService:
     ) -> None:
         if name is None and description is None:
             raise ConfigurationError("Config update requires a name or description.")
+        rest_variables: dict[str, object] = {
+            "configId": validated_id(config_id, "config ID"),
+            "name": validated_name(name),
+            "description": validated_description(description),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.update(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=UpdateConfigData,
             operation_name="UpdateConfig",
@@ -180,6 +227,9 @@ class ConfigsService:
         raise_for_status(response.configs.update_config.status)
 
     def delete(self, *, config_id: str) -> None:
+        rest_variables: dict[str, object] = {"configId": validated_id(config_id, "config ID")}
+        if self._rest_api is not None:
+            return _rest_calls.delete(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=DeleteConfigData,
             operation_name="DeleteConfig",
@@ -191,6 +241,12 @@ class ConfigsService:
     def import_geometry(self, *, config_id: str, filename: str) -> GeometryImportRuns:
         """Start the server-owned conversion and ordered geometry-setup runs."""
 
+        rest_variables: dict[str, object] = {
+            "configId": validated_id(config_id, "config ID"),
+            "filename": validated_geometry_filename(filename),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.import_geometry(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=ImportConfigGeometryData,
             operation_name="ImportConfigGeometry",
@@ -231,6 +287,18 @@ class ConfigsService:
             raise ConfigurationError("Config recursive flag is invalid.")
         if not isinstance(order, SortOrder):
             raise ConfigurationError("Config sort order is invalid.")
+        rest_variables: dict[str, object] = {
+            "configId": validated_id(config_id, "config ID"),
+            "area": area.value,
+            "path": validated_content_path(path, allow_empty=True) or None,
+            "deep": recursive,
+            "order": order.value,
+            "offset": float(validated_offset(offset)),
+            "limit": float(validated_page_size(limit)),
+            "cursor": validated_cursor(cursor),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.list_content(self._rest_api, rest_variables)
         result = self._graphql.execute(
             operation_name="ListConfigContent",
             query=LIST_CONFIG_CONTENT_QUERY,
@@ -264,6 +332,12 @@ class ConfigsService:
         )
 
     def get_text(self, *, config_id: str, path: str) -> str:
+        rest_variables: dict[str, object] = {
+            "configId": validated_id(config_id, "config ID"),
+            "path": validated_content_path(path),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.get_text(self._rest_api, rest_variables)
         result = self._graphql.execute(
             operation_name="GetConfigText",
             query=GET_CONFIG_TEXT_QUERY,
@@ -281,6 +355,13 @@ class ConfigsService:
         return payload.content
 
     def set_text(self, *, config_id: str, path: str, content: str) -> None:
+        rest_variables: dict[str, object] = {
+            "configId": validated_id(config_id, "config ID"),
+            "path": validated_content_path(path),
+            "content": validated_text_content(content),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.set_text(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=SetConfigTextData,
             operation_name="SetConfigText",
@@ -300,6 +381,13 @@ class ConfigsService:
         path: str,
         updates: Sequence[ConfigValueUpdate],
     ) -> None:
+        rest_variables: dict[str, object] = {
+            "configId": validated_id(config_id, "config ID"),
+            "path": validated_yaml_path(path),
+            "updates": validated_config_value_updates(updates),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.set_values(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=SetConfigValuesData,
             operation_name="SetConfigValues",
@@ -321,6 +409,13 @@ class ConfigsService:
     ) -> None:
         if not isinstance(area, ConfigContentArea):
             raise ConfigurationError("Config content area is invalid.")
+        rest_variables: dict[str, object] = {
+            "configId": validated_id(config_id, "config ID"),
+            "area": area.value,
+            "path": validated_content_path(path),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.delete_content(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=DeleteConfigContentData,
             operation_name="DeleteConfigContent",
@@ -392,75 +487,3 @@ class ConfigsService:
             mapped_error = _unknown_mutation_outcome(request_id=error.request_id)
         assert mapped_error is not None
         raise mapped_error
-
-
-def _validated_response(
-    response_type: type[WireModelT],
-    data: dict[str, object],
-) -> WireModelT:
-    response: WireModelT | None = None
-    try:
-        response = response_type.model_validate(data)
-    except ValidationError:
-        pass
-    if response is None:
-        raise ProtocolError("dicehub returned an incompatible config response.")
-    return response
-
-
-def _config_from_payload(payload: ConfigPayload) -> Config:
-    return Config(
-        config_id=payload.config_id,
-        app_id=payload.app_id,
-        config_internal_id=payload.config_internal_id,
-        name=payload.name,
-        description=payload.description,
-        is_default=payload.is_default,
-        template_version=payload.template_version,
-        updating=payload.updating,
-    )
-
-
-def _run_status_from_payload(payload: RunStatusPayload) -> RunStatus:
-    return RunStatus(
-        run_id=payload.run_id,
-        state=RunState(payload.state),
-        execution_status=(
-            RunExecutionStatus(payload.execution_status)
-            if payload.execution_status is not None
-            else None
-        ),
-        error=RunError(payload.error) if payload.error is not None else None,
-        flags=tuple(RunFlag(flag) for flag in payload.flags or ()),
-        updated_at=payload.updated_at,
-    )
-
-
-def _unknown_mutation_outcome(*, request_id: str | None = None) -> MutationOutcomeUnknownError:
-    return MutationOutcomeUnknownError(
-        "The config mutation may have completed, but dicehub did not confirm its outcome.",
-        request_id=request_id,
-    )
-
-
-def _file_endpoint(config_id: str, path: str) -> str:
-    validated_config_id = validated_id(config_id, "config ID")
-    validated_path = validated_content_path(path)
-    encoded_path = quote(validated_path, safe="/-._~")
-    return f"api/v1/configs/{validated_config_id}/files/{encoded_path}"
-
-
-def _bounded_file_chunks(source: BinaryIO, max_bytes: int) -> Iterator[bytes]:
-    if not callable(getattr(source, "read", None)):
-        raise ConfigurationError("Config file source must be readable.")
-    total = 0
-    while True:
-        chunk = source.read(64 * 1024)
-        if not isinstance(chunk, bytes):
-            raise ConfigurationError("Config file source must return bytes.")
-        if not chunk:
-            return
-        total += len(chunk)
-        if total > max_bytes:
-            raise ConfigurationError("Config file exceeds the configured upload limit.")
-        yield chunk

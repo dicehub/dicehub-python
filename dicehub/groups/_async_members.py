@@ -4,7 +4,9 @@ from typing import TypeVar
 
 from pydantic import BaseModel
 
+import dicehub.groups._rest_async_calls as _rest_calls
 from dicehub._core.async_graphql import AsyncGraphQLExecutor
+from dicehub._core.rest_v2 import AsyncRestV2Executor
 from dicehub._core.status import raise_for_status
 from dicehub.errors import (
     ConfigurationError,
@@ -50,9 +52,13 @@ _AMBIGUOUS_MUTATION_ERRORS = (TransportError, HTTPError, GraphQLError, ProtocolE
 
 
 class _AsyncGroupMembersMixin:
+    _rest_api: AsyncRestV2Executor | None
     _graphql: AsyncGraphQLExecutor
 
     async def list_roles(self, *, group_id: str) -> tuple[GroupRole, ...]:
+        rest_variables: dict[str, object] = {"groupId": validated_id(group_id, "group ID")}
+        if self._rest_api is not None:
+            return await _rest_calls.list_roles(self._rest_api, rest_variables)
         result = await self._graphql.execute(
             operation_name="ListGroupRoles",
             query=LIST_GROUP_ROLES_QUERY,
@@ -96,6 +102,8 @@ class _AsyncGroupMembersMixin:
             limit=limit,
             cursor=cursor,
         )
+        if self._rest_api is not None:
+            return await _rest_calls.list_user_members(self._rest_api, variables)
         result = await self._graphql.execute(
             operation_name="ListGroupUserMemberships",
             query=LIST_GROUP_USER_MEMBERSHIPS_QUERY,
@@ -137,6 +145,8 @@ class _AsyncGroupMembersMixin:
             limit=limit,
             cursor=cursor,
         )
+        if self._rest_api is not None:
+            return await _rest_calls.list_team_members(self._rest_api, variables)
         result = await self._graphql.execute(
             operation_name="ListGroupTeamMemberships",
             query=LIST_GROUP_TEAM_MEMBERSHIPS_QUERY,
@@ -166,6 +176,16 @@ class _AsyncGroupMembersMixin:
         role_id: str,
         visibility: MembershipVisibility = MembershipVisibility.PRIVATE,
     ) -> None:
+        rest_variables: dict[str, object] = {
+            "groupId": validated_id(group_id, "group ID"),
+            "memberId": validated_id(member_id, "member ID"),
+            "roleId": validated_id(role_id, "role ID"),
+            "visibility": validated_enum(
+                visibility, MembershipVisibility, "membership visibility"
+            ).value,
+        }
+        if self._rest_api is not None:
+            return await _rest_calls.add_member(self._rest_api, rest_variables)
         response = await self._execute_member_mutation(
             response_type=AddGroupMemberData,
             operation_name="AddGroupMember",
@@ -193,6 +213,18 @@ class _AsyncGroupMembersMixin:
     ) -> None:
         if role_id is None and visibility is None:
             raise ConfigurationError("Group member update must include at least one change.")
+        rest_variables: dict[str, object] = {
+            "groupId": validated_id(group_id, "group ID"),
+            "memberId": validated_id(member_id, "member ID"),
+            "roleId": validated_id(role_id, "role ID") if role_id is not None else None,
+            "visibility": validated_enum(
+                visibility, MembershipVisibility, "membership visibility"
+            ).value
+            if visibility is not None
+            else None,
+        }
+        if self._rest_api is not None:
+            return await _rest_calls.update_member(self._rest_api, rest_variables)
         response = await self._execute_member_mutation(
             response_type=UpdateGroupMemberData,
             operation_name="UpdateGroupMember",
@@ -215,6 +247,12 @@ class _AsyncGroupMembersMixin:
         raise_for_status(response.groups.update_member.status)
 
     async def remove_member(self, *, group_id: str, member_id: str) -> None:
+        rest_variables: dict[str, object] = {
+            "groupId": validated_id(group_id, "group ID"),
+            "memberId": validated_id(member_id, "member ID"),
+        }
+        if self._rest_api is not None:
+            return await _rest_calls.remove_member(self._rest_api, rest_variables)
         response = await self._execute_member_mutation(
             response_type=RemoveGroupMemberData,
             operation_name="RemoveGroupMember",

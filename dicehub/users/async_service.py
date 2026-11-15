@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pydantic import ValidationError
 
+import dicehub.users._rest_async_calls as _rest_calls
 from dicehub._core.async_graphql import AsyncGraphQLExecutor
+from dicehub._core.rest_v2 import AsyncRestV2Executor
 from dicehub._core.status import raise_for_status
 from dicehub.errors import ProtocolError, SelectorResolutionError
 from dicehub.users._graphql import (
@@ -16,10 +18,15 @@ from dicehub.users.service import _candidate_from_payload, _validated_response
 
 
 class AsyncUsersService:
-    def __init__(self, graphql: AsyncGraphQLExecutor) -> None:
+    def __init__(
+        self, graphql: AsyncGraphQLExecutor, *, rest_api: AsyncRestV2Executor | None = None
+    ) -> None:
         self._graphql = graphql
+        self._rest_api = rest_api
 
     async def me(self) -> User:
+        if self._rest_api is not None:
+            return await _rest_calls.me(self._rest_api)
         result = await self._graphql.execute(
             operation_name="WhoAmI",
             query=WHO_AM_I_QUERY,
@@ -48,6 +55,10 @@ class AsyncUsersService:
     ) -> MembershipCandidate:
         valid_namespace_id = validated_namespace_id(namespace_id)
         valid_username = validated_username(username)
+        if self._rest_api is not None:
+            return await _rest_calls.resolve_membership_candidate(
+                self._rest_api, valid_namespace_id, valid_username
+            )
         result = await self._graphql.execute(
             operation_name="SearchMembershipCandidates",
             query=SEARCH_MEMBERSHIP_CANDIDATES_QUERY,

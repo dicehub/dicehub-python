@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pydantic import ValidationError
 
+import dicehub.auth._rest_calls as _rest_calls
 from dicehub._core.graphql import GraphQLExecutor
+from dicehub._core.rest_v2 import RestV2Executor
 from dicehub._core.status import raise_for_status
 from dicehub.auth._graphql import AUTH_CONTEXT_QUERY, AuthContextData
 from dicehub.auth.models import AuthContext, IdentityMode
@@ -14,12 +16,16 @@ class AuthService:
         self,
         graphql: GraphQLExecutor,
         *,
+        rest_api: RestV2Executor | None = None,
         expected_identity_mode: IdentityMode,
     ) -> None:
         self._graphql = graphql
+        self._rest_api = rest_api
         self._expected_identity_mode = expected_identity_mode
 
     def context(self) -> AuthContext:
+        if self._rest_api is not None:
+            return _rest_calls.context(self._rest_api, self._expected_identity_mode)
         operation = self._graphql.execute(
             operation_name="GetAuthContext",
             query=AUTH_CONTEXT_QUERY,

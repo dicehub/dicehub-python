@@ -6,7 +6,9 @@ from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
 
+import dicehub.api_keys._rest_calls as _rest_calls
 from dicehub._core.graphql import GraphQLExecutor
+from dicehub._core.rest_v2 import RestV2Executor
 from dicehub._core.status import raise_for_status
 from dicehub.api_keys._graphql import (
     CREATE_API_KEY_MUTATION,
@@ -60,9 +62,11 @@ class ApiKeysService:
         self,
         graphql: GraphQLExecutor,
         *,
+        rest_api: RestV2Executor | None = None,
         identity_mode: IdentityMode | None = None,
     ) -> None:
         self._graphql = graphql
+        self._rest_api = rest_api
         self._identity_mode = identity_mode
 
     def create(
@@ -80,6 +84,15 @@ class ApiKeysService:
             not_before,
             expires_at,
         )
+        rest_variables: dict[str, object] = {
+            "namespaceId": validated_id(namespace_id, "namespace ID"),
+            "name": validated_name(name),
+            "permissions": permission_values,
+            "notBefore": _timestamp_variable(not_before),
+            "expiresAt": _timestamp_variable(expires_at),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.create(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=CreateApiKeyData,
             operation_name="CreateApiKey",
@@ -105,6 +118,8 @@ class ApiKeysService:
     def list(self, *, namespace_id: str) -> tuple[ApiKey, ...]:
         self._require_session()
         valid_namespace_id = validated_id(namespace_id, "namespace ID")
+        if self._rest_api is not None:
+            return _rest_calls.list(self._rest_api, valid_namespace_id)
         api_keys: list[ApiKey] = []
         seen_ids: set[str] = set()
         before_api_key_id: str | None = None
@@ -161,6 +176,12 @@ class ApiKeysService:
 
     def get(self, *, namespace_id: str, api_key_id: str) -> ApiKey | None:
         self._require_session()
+        rest_variables: dict[str, object] = {
+            "namespaceId": validated_id(namespace_id, "namespace ID"),
+            "apiKeyId": validated_id(api_key_id, "API-key ID"),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.get(self._rest_api, rest_variables)
         result = self._graphql.execute(
             operation_name="GetApiKey",
             query=GET_API_KEY_QUERY,
@@ -176,6 +197,11 @@ class ApiKeysService:
 
     def list_permissions(self, *, namespace_id: str) -> tuple[NamespacePermission, ...]:
         self._require_session()
+        rest_variables: dict[str, object] = {
+            "namespaceId": validated_id(namespace_id, "namespace ID")
+        }
+        if self._rest_api is not None:
+            return _rest_calls.list_permissions(self._rest_api, rest_variables)
         result = self._graphql.execute(
             operation_name="ListApiKeyPermissions",
             query=LIST_API_KEY_PERMISSIONS_QUERY,
@@ -195,6 +221,14 @@ class ApiKeysService:
         permissions: Sequence[NamespacePermission] | None = None,
     ) -> ApiKey:
         self._require_session()
+        rest_variables: dict[str, object] = {
+            "namespaceId": validated_id(namespace_id, "namespace ID"),
+            "apiKeyId": validated_id(api_key_id, "API-key ID"),
+            "name": validated_name(name),
+            "permissions": None if permissions is None else validated_permissions(permissions),
+        }
+        if self._rest_api is not None:
+            return _rest_calls.update(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=UpdateApiKeyData,
             operation_name="UpdateApiKey",
@@ -216,6 +250,9 @@ class ApiKeysService:
 
     def delete(self, *, api_key_id: str) -> None:
         self._require_session()
+        rest_variables: dict[str, object] = {"apiKeyId": validated_id(api_key_id, "API-key ID")}
+        if self._rest_api is not None:
+            return _rest_calls.delete(self._rest_api, rest_variables)
         response = self._execute_mutation(
             response_type=DeleteApiKeyData,
             operation_name="DeleteApiKey",

@@ -7,7 +7,9 @@ from typing import BinaryIO, TypeVar
 
 from pydantic import BaseModel, SecretStr
 
+import dicehub.runs._rest_async_calls as _rest_calls
 from dicehub._core.async_graphql import AsyncGraphQLExecutor
+from dicehub._core.rest_v2 import AsyncRestV2Executor
 from dicehub._core.status import raise_for_status
 from dicehub.errors import (
     ConfigurationError,
@@ -88,10 +90,15 @@ _AMBIGUOUS_MUTATION_ERRORS = (TransportError, HTTPError, GraphQLError, ProtocolE
 
 
 class AsyncRunsService:
-    def __init__(self, graphql: AsyncGraphQLExecutor) -> None:
+    def __init__(
+        self, graphql: AsyncGraphQLExecutor, *, rest_api: AsyncRestV2Executor | None = None
+    ) -> None:
         self._graphql = graphql
+        self._rest_api = rest_api
 
     async def list_machine_types(self) -> tuple[MachineType, ...]:
+        if self._rest_api is not None:
+            return await _rest_calls.list_machine_types(self._rest_api)
         result = await self._graphql.execute(
             operation_name="ListMachineTypes",
             query=LIST_MACHINE_TYPES_QUERY,
@@ -133,6 +140,20 @@ class AsyncRunsService:
     ) -> RunPage:
         valid_order_by = validated_enum(order_by, RunOrderField, "run order field")
         valid_order = validated_enum(order, SortOrder, "run sort order")
+        rest_variables: dict[str, object] = {
+            "namespaceId": validated_id(namespace_id, "namespace ID"),
+            "includeDescendants": validated_bool(include_descendants, "include-descendants flag"),
+            "appId": validated_optional_id(app_id, "app ID"),
+            "runTypes": validated_enum_values(run_types, RunType, "run types"),
+            "states": validated_enum_values(states, RunState, "run states"),
+            "orderBy": valid_order_by.value,
+            "order": valid_order.value,
+            "offset": validated_offset(offset),
+            "limit": validated_page_size(limit),
+            "cursor": validated_cursor(cursor),
+        }
+        if self._rest_api is not None:
+            return await _rest_calls.list(self._rest_api, rest_variables)
         result = await self._graphql.execute(
             operation_name="ListRuns",
             query=LIST_RUNS_QUERY,
@@ -165,6 +186,9 @@ class AsyncRunsService:
         )
 
     async def get(self, *, run_id: str) -> RunDetail:
+        rest_variables: dict[str, object] = {"runId": validated_uuid(run_id, "run ID")}
+        if self._rest_api is not None:
+            return await _rest_calls.get(self._rest_api, rest_variables)
         result = await self._graphql.execute(
             operation_name="GetRun",
             query=GET_RUN_QUERY,
@@ -220,6 +244,11 @@ class AsyncRunsService:
         )
 
     async def _status(self, run_id: str, *, timeout_cap: float | None = None) -> RunStatus:
+        rest_variables: dict[str, object] = {"runId": run_id}
+        if self._rest_api is not None:
+            return await _rest_calls._status(
+                self._rest_api, rest_variables, timeout_cap=timeout_cap
+            )
         if timeout_cap is None:
             result = await self._graphql.execute(
                 operation_name="GetRunStatus",
@@ -316,6 +345,10 @@ class AsyncRunsService:
         valid_app_id = validated_id(app_id, "app ID")
         valid_run_id = validated_uuid(run_id, "run ID")
         valid_regenerate = validated_bool(regenerate, "regenerate flag")
+        if self._rest_api is not None:
+            return await _rest_calls.get_result_s3_credentials(
+                self._rest_api, valid_app_id, valid_run_id, valid_regenerate
+            )
         folder_result = await self._graphql.execute(
             operation_name="GetRunResultFolder",
             query=GET_RUN_RESULT_FOLDER_QUERY,
@@ -362,6 +395,15 @@ class AsyncRunsService:
         cpu_count: int | None = None,
         notify: bool = False,
     ) -> RunStatus:
+        rest_variables: dict[str, object] = {
+            "configId": validated_id(config_id, "config ID"),
+            "machineTypeId": validated_machine_type_id(machine_type_id),
+            "nodeCount": validated_positive_count(node_count, "node count"),
+            "cpuCount": validated_optional_positive_count(cpu_count, "CPU count"),
+            "notify": validated_bool(notify, "notify flag"),
+        }
+        if self._rest_api is not None:
+            return await _rest_calls.start(self._rest_api, rest_variables)
         response = await self._execute_mutation(
             response_type=StartRunData,
             operation_name="StartRun",
@@ -381,6 +423,9 @@ class AsyncRunsService:
         return _run_status_from_payload(payload.run)
 
     async def stop(self, *, run_id: str) -> None:
+        rest_variables: dict[str, object] = {"runId": validated_uuid(run_id, "run ID")}
+        if self._rest_api is not None:
+            return await _rest_calls.stop(self._rest_api, rest_variables)
         response = await self._execute_mutation(
             response_type=StopRunData,
             operation_name="StopRun",
